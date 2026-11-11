@@ -1250,10 +1250,11 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 }
 
 - (void)phoneControlPressed:(UIButton *)button {
+    [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
     // Keep the mouse held while switching to a destination app during a drag.
     if (button.tag == 3 || button.tag == 5) [self releasePhoneDrag];
     switch (button.tag) {
-        case 1: [self sendPhoneCommand:@"WIN+TAB"]; break;
+        case 1: [self sendPhoneCommand:@"WIN+ALT+CTRL+A"]; break;
         case 2: {
             UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Shortcuts"
                 message:nil preferredStyle:UIAlertControllerStyleActionSheet];
@@ -1279,7 +1280,35 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             }
             break;
         }
-        case 5: [self expandSettingsView]; break;
+        case 5: {
+            UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Your desktop"
+                message:@"Choose more room for desktop apps, or larger text. Changes apply immediately."
+                preferredStyle:UIAlertControllerStyleActionSheet];
+            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Disconnect"];
+            NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+D", @"WIN+ALT+SPACE"];
+            __weak StreamFrameViewController *weakSelf = self;
+            for (NSInteger i = 0; i < titles.count; i++) {
+                [menu addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                    StreamFrameViewController *vc = weakSelf;
+                    if (!vc) return;
+                    if (i < commands.count) [vc sendPhoneCommand:commands[i]];
+                    else if (i == 5) {
+                        vc->_magnifierViewportInteractionActive = YES;
+                        [vc updateScrollViewInteractionState];
+                        [vc applyMagnifierTranslation:CGVectorMake(0, 0) pinchDelta:120];
+                        [vc updateTransientHUDText:@"Pinch to zoom · two fingers to pan · tap to click"];
+                    } else if (i == 6) {
+                        [vc resetMagnifierStreamViewWithAnimated:YES];
+                    } else if (i == 7) [vc expandSettingsView];
+                    else [vc returnToMainFrame];
+                }]];
+            }
+            [menu addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+            menu.popoverPresentationController.sourceView = button;
+            menu.popoverPresentationController.sourceRect = button.bounds;
+            [self presentViewController:menu animated:YES completion:nil];
+            break;
+        }
         case 6:
             _phoneToolbarCollapsed = !_phoneToolbarCollapsed;
             for (UIView *control in _phoneToolbarStack.arrangedSubviews) {
@@ -1300,9 +1329,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     _phoneToolbar.clipsToBounds = YES;
     _phoneToolbarStack = [[UIStackView alloc] init];
     _phoneToolbarStack.translatesAutoresizingMaskIntoConstraints = NO;
-    _phoneToolbarStack.spacing = 4;
-    NSArray *titles = @[@"Apps", @"Keys", @"Type", @"Drag", @"Settings", @"Hide"];
-    NSArray *labels = @[@"Switch apps", @"Keyboard shortcuts", @"Show keyboard", @"Arm drag lock", @"Stream settings", @"Hide phone controls"];
+    _phoneToolbarStack.spacing = 6;
+    NSArray *titles = @[@"Apps", @"Keys", @"Type", @"Drag", @"More", @"Hide"];
+    NSArray *labels = @[@"Switch apps", @"Keyboard shortcuts", @"Show keyboard", @"Arm drag lock", @"Desktop layout, zoom, agent desktops and settings", @"Hide phone controls"];
     for (NSInteger i = 0; i < titles.count; i++) {
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         button.tag = i + 1;
@@ -1310,12 +1339,27 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         [button setTitleColor:UIColor.systemYellowColor forState:UIControlStateSelected];
         button.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        if (@available(iOS 15.0, *)) {
+            NSArray *symbols = @[@"square.grid.2x2", @"command", @"keyboard", @"hand.draw", @"ellipsis.circle", @"chevron.down"];
+            UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
+            config.image = [UIImage systemImageNamed:symbols[i]];
+            config.preferredSymbolConfigurationForImage = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
+            config.imagePlacement = NSDirectionalRectEdgeTop;
+            config.imagePadding = 4;
+            config.contentInsets = NSDirectionalEdgeInsetsMake(4, 0, 4, 0);
+            config.titleTextAttributesTransformer = ^NSDictionary *(NSDictionary *attributes) {
+                NSMutableDictionary *result = [attributes mutableCopy];
+                result[NSFontAttributeName] = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
+                return result;
+            };
+            button.configuration = config;
+        }
         button.accessibilityLabel = labels[i];
         [button addTarget:self action:@selector(phoneControlPressed:) forControlEvents:UIControlEventTouchUpInside];
         NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:46];
         width.priority = 999;
         width.active = YES;
-        [button.heightAnchor constraintEqualToConstant:44].active = YES;
+        [button.heightAnchor constraintEqualToConstant:56].active = YES;
         [_phoneToolbarStack addArrangedSubview:button];
         if (button.tag == 4) _phoneDragButton = button;
     }
@@ -1910,6 +1954,12 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     // NSLog(@"did enter background, %d, %@, %d", _settings.enablePIP, self.pipController, self.pipController.isPictureInPictureActive);
     
     PublicUtils.appDidEnterBackground = true;
+#if !TARGET_OS_TV
+    if (PublicUtils.isIPhone && [self.streamConfig.appName isEqualToString:@"Desktop"]) {
+        [self returnToMainFrame];
+        return;
+    }
+#endif
     
     if (_settings.enablePIP && self.pipController && self.pipController.isPictureInPictureActive) {
         //Log(LOG_I, @"PIP is active, not terminating stream");

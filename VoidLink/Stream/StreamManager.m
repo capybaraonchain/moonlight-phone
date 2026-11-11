@@ -93,6 +93,35 @@
     _config.appVersion = appversion;
     _config.gfeVersion = gfeVersion;
     
+    // Desktop is a session lease: a fresh launch reruns the host's client/display
+    // preparation. Resuming a previous Mac/phone lease keeps stale dimensions.
+    if (PublicUtils.isIPhone && [_config.appName isEqualToString:@"Desktop"] &&
+        [serverState hasSuffix:@"_SERVER_BUSY"]) {
+        if (![[serverInfoResp getStringTag:@"currentgame"] isEqualToString:_config.appID]) {
+            [_callbacks launchFailed:@"Another application is streaming. End that session before opening Desktop."];
+            return;
+        }
+        HttpResponse *quit = [[HttpResponse alloc] init];
+        [hMan executeRequestSynchronously:[HttpRequest requestForResponse:quit withUrlRequest:[hMan newQuitAppRequest]]];
+        if (![quit isStatusOk]) {
+            [_callbacks launchFailed:quit.statusMessage];
+            return;
+        }
+        for (int attempt = 0; attempt < 50; attempt++) {
+            ServerInfoResponse *fresh = [[ServerInfoResponse alloc] init];
+            [hMan executeRequestSynchronously:[HttpRequest requestForResponse:fresh withUrlRequest:[hMan newServerInfoRequest:false]]];
+            if ([fresh isStatusOk] && ![[fresh getStringTag:@"state"] hasSuffix:@"_SERVER_BUSY"]) {
+                serverState = [fresh getStringTag:@"state"];
+                break;
+            }
+            [NSThread sleepForTimeInterval:0.1];
+        }
+        if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
+            [_callbacks launchFailed:@"The previous Desktop session is still closing. Try again in a moment."];
+            return;
+        }
+    }
+
     // resumeApp and launchApp handle calling launchFailed
     NSString* sessionUrl;
     if ([serverState hasSuffix:@"_SERVER_BUSY"]) {
