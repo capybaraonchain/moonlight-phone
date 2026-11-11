@@ -2146,14 +2146,22 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (BOOL)phoneDragLocked {
+#if TARGET_OS_TV
+    return NO;
+#else
     return [touchHandler isKindOfClass:[AbsoluteTouchHandler class]] &&
         [(AbsoluteTouchHandler *)touchHandler phoneDragLocked];
+#endif
 }
 
 - (BOOL)configurePhoneDragLock:(BOOL)locked {
+#if TARGET_OS_TV
+    return NO;
+#else
     if (![touchHandler isKindOfClass:[AbsoluteTouchHandler class]]) return NO;
     [(AbsoluteTouchHandler *)touchHandler setPhoneDragLocked:locked];
     return YES;
+#endif
 }
 
 #if !TARGET_OS_TV

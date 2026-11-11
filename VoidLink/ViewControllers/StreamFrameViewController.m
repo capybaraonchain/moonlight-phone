@@ -1232,6 +1232,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     if (_phoneToolbar) {
         _floatingKeyboardButton.hidden = YES;
         _phoneDragButton.selected = _streamView.phoneDragLocked;
+        [_phoneDragButton setTitle:_streamView.phoneDragLocked ? @"Drop" : @"Drag" forState:UIControlStateNormal];
         [self.view bringSubviewToFront:_phoneToolbar];
     }
 }
@@ -1268,7 +1269,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         }
         case 3: [_streamView toggleSoftKeyboardFromButton]; break;
         case 4: {
-            BOOL enable = !_streamView.phoneDragLocked;
+            BOOL enable = !button.selected;
             if ([_streamView configurePhoneDragLock:enable]) {
                 button.selected = enable;
                 [button setTitle:enable ? @"Drop" : @"Drag" forState:UIControlStateNormal];

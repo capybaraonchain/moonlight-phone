@@ -498,7 +498,8 @@ import UIKit
         if defaults.data(forKey: "savedCommands") == nil {  // save default entries if the data is empty.
             let defaultCommands: [RemoteCommand] = [
                 RemoteCommand(cmdString: "WIN+TAB", alias: "Switch apps"),
-                RemoteCommand(cmdString: "WIN+SPACE", alias: "Launcher"),
+                RemoteCommand(cmdString: "WIN+ALT+SPACE", alias: "Launch app"),
+                RemoteCommand(cmdString: "WIN+SPACE", alias: "Desktop menu"),
                 RemoteCommand(cmdString: "CTRL+C", alias: "Copy"),
                 RemoteCommand(cmdString: "CTRL+V", alias: "Paste"),
                 RemoteCommand(cmdString: "CTRL+X", alias: "Cut"),
