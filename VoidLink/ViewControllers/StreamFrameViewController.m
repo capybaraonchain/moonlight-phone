@@ -1250,7 +1250,8 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 }
 
 - (void)phoneControlPressed:(UIButton *)button {
-    if (button.tag != 4 && button.tag != 6) [self releasePhoneDrag];
+    // Keep the mouse held while switching to a destination app during a drag.
+    if (button.tag == 3 || button.tag == 5) [self releasePhoneDrag];
     switch (button.tag) {
         case 1: [self sendPhoneCommand:@"WIN+TAB"]; break;
         case 2: {

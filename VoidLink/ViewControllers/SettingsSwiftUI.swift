@@ -4146,7 +4146,7 @@ final class SettingsSession: NSObject, ObservableObject {
         if pointSize == screen.bounds.size {
             let nativeSize = screen.nativeBounds.size
             if (pointSize.width > pointSize.height) != (nativeSize.width > nativeSize.height) {
-                return CGSize(width: nativeSize.height, height: nativeSize.width)
+                return PublicUtils.phoneStreamSize(CGSize(width: nativeSize.height, height: nativeSize.width))
             }
             return PublicUtils.phoneStreamSize(nativeSize)
         }
