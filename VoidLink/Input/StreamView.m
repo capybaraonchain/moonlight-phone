@@ -2145,6 +2145,17 @@ static CGFloat previousRollAngle = 0;
 #endif
 }
 
+- (BOOL)phoneDragLocked {
+    return [touchHandler isKindOfClass:[AbsoluteTouchHandler class]] &&
+        [(AbsoluteTouchHandler *)touchHandler phoneDragLocked];
+}
+
+- (BOOL)configurePhoneDragLock:(BOOL)locked {
+    if (![touchHandler isKindOfClass:[AbsoluteTouchHandler class]]) return NO;
+    [(AbsoluteTouchHandler *)touchHandler setPhoneDragLocked:locked];
+    return YES;
+}
+
 #if !TARGET_OS_TV
 
 - (void)switchPencilHover{
@@ -2180,6 +2191,7 @@ static CGFloat previousRollAngle = 0;
 #endif
 
 - (void)cleanUp{
+    [self configurePhoneDragLock:NO];
 #if TARGET_OS_TV
     tvOSRemoteTextInputLoopActive = NO;
     [GamepadNavigationIllustrationHud setTvOSSystemTextInputActive:NO];

@@ -66,6 +66,8 @@ static NSString* DB_NAME = @"Limelight_iOS.sqlite";
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for command tool customization after application launch (works only when user default is nil)
     [CommandManager presetDefaultCommands];
+    [PublicUtils changeDefaultSettingsForView:nil];
+    [PublicUtils updatePartialSettings];
     [GenericUtils installSegmentedControlPreviousSelectionTracking];
     [IAPManager shared];
     [IAPManager refreshPurchaseCache];

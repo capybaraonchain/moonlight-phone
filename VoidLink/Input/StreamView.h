@@ -99,6 +99,8 @@ NS_INLINE StreamInputGeometry StreamInputGeometryMake(CGRect bounds, CGFloat asp
 - (void)liftMetalVideoViewIfNeeded:(CGFloat)liftHeight;
 
 - (void)alterAbsTouchDragWith:(int32_t)mouseButton;
+@property (nonatomic, readonly) BOOL phoneDragLocked;
+- (BOOL)configurePhoneDragLock:(BOOL)locked;
 
 - (void)enablePencilHover;
 - (void)disablePencilHover;

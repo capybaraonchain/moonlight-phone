@@ -15,6 +15,17 @@ import GameController
 import VideoToolbox
 
 @objc public class PublicUtils: NSObject {
+    /// Keep the full-screen preset, persisted settings and launch request in
+    /// agreement. Sunshine's CUDA chroma copy cannot accept odd dimensions.
+    /// Multiples of six also retain whole logical pixels at the phone's 3x DPI.
+    @objc public static func phoneStreamSize(_ size: CGSize) -> CGSize {
+        let alignment = isIPhone ? 6 : 2
+        func aligned(_ value: CGFloat) -> CGFloat {
+            let pixels = max(256, Int(value.rounded()))
+            return CGFloat(max(256, pixels - pixels % alignment))
+        }
+        return CGSize(width: aligned(size.width), height: aligned(size.height))
+    }
     
     @objc public static let isProductionBuild: Bool = {
         return ["com.voidlink.iOS"
@@ -510,6 +521,19 @@ import VideoToolbox
         settings.pencilTipOffsetY = 0
         settings.oscLayoutToolFingers = 99
         settings.keyboardToggleFingers = 99
+        if isIPhone {
+            settings.unlockDisplayOrientation = true
+            settings.resolutionSelected = 4
+            let nativeSize = phoneStreamSize(UIScreen.main.nativeBounds.size)
+            settings.width = NSNumber(value: Int(nativeSize.width))
+            settings.height = NSNumber(value: Int(nativeSize.height))
+            settings.framerate = 60
+            settings.touchMode = NSNumber(value: TouchMode.absolute.rawValue)
+            settings.showKeyboardToolbar = true
+            settings.keyboardToggleFingers = 3
+            // The phone toolbar supplies desktop controls without a gamepad HUD.
+            settings.onscreenControls = NSNumber(value: 0)
+        }
         dataManager.saveDataSynchronously()
     }
 

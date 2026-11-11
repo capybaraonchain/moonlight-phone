@@ -90,6 +90,7 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 }
 
 - (void)onLongPressStart:(NSTimer*)timer {
+    if (_phoneDragLocked) return;
     // Raise the left click and start a right click
     if(multiTouchesDetected) return;
     
@@ -147,8 +148,9 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
     }
     
     // Press the left button down
-    if(!_delayMouseLeftClick){
+    if(_phoneDragLocked || !_delayMouseLeftClick){
         LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT); //deprecated
+        if (_phoneDragLocked) dragButtonDown = true;
     }
     
     // Start the long press timer
@@ -239,6 +241,12 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
         
         // Remember this last touch for touch-down deadzoning
         CGPoint touchEndLocation = [capturedTouch locationInView:streamView];
+        if (_phoneDragLocked) {
+            // Lifting a finger permits repositioning; Drop releases the button.
+            lastTouchUp = [touches anyObject];
+            lastTouchUpLocation = touchEndLocation;
+            return;
+        }
         
         if(_delayMouseLeftClick){
             if(CACurrentMediaTime()-touchBeganTimeStamp<leftClickTimeThreshold) {
@@ -268,8 +276,29 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
+    BOOL wasLocked = self.phoneDragLocked;
+    self.phoneDragLocked = NO;
+    if (wasLocked) {
+        capturedTouch = nil;
+        return;
+    }
     // Treat this as a normal touchesEnded event
     [self touchesEnded:touches withEvent:event];
+}
+
+- (void)setPhoneDragLocked:(BOOL)locked {
+    if (_phoneDragLocked == locked) return;
+    _phoneDragLocked = locked;
+    [longPressTimer invalidate];
+    longPressTimer = nil;
+    if (!locked) {
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        dragButtonDown = false;
+    }
+}
+
+- (void)dealloc {
+    if (_phoneDragLocked) LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
 }
 
 - (void)sendShortMouseLeftButtonClickEvent{

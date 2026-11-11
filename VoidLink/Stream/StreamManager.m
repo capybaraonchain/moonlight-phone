@@ -40,6 +40,9 @@
 - (id) initWithConfig:(StreamConfiguration*)config renderView:(UIView*)view connectionCallbacks:(id<ConnectionCallbacks>)callbacks {
     self = [super init];
     _config = config;
+    CGSize safeSize = [PublicUtils phoneStreamSize:CGSizeMake(config.width, config.height)];
+    _config.width = (int)safeSize.width;
+    _config.height = (int)safeSize.height;
     _renderView = view;
     _callbacks = callbacks;
     _config.riKey = [Utils randomBytes:16];

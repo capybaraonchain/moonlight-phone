@@ -118,6 +118,10 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     ToolboxViewController* toolBoxViewController;
 #if !TARGET_OS_TV
     FloatingKeyboardButton* _floatingKeyboardButton;
+    UIVisualEffectView *_phoneToolbar;
+    UIStackView *_phoneToolbarStack;
+    UIButton *_phoneDragButton;
+    BOOL _phoneToolbarCollapsed;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
     uint16_t overlayLevel;
@@ -807,6 +811,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+#if !TARGET_OS_TV
+    [self releasePhoneDrag];
+#endif
 }
 
 - (void)viewDidAppear:(BOOL)animated
@@ -1222,6 +1229,110 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     [super viewDidLayoutSubviews];
     [self bringFloatingKeyboardButtonToFront];
     [_floatingKeyboardButton restorePosition];
+    if (_phoneToolbar) {
+        _floatingKeyboardButton.hidden = YES;
+        _phoneDragButton.selected = _streamView.phoneDragLocked;
+        [self.view bringSubviewToFront:_phoneToolbar];
+    }
+}
+
+- (void)releasePhoneDrag {
+    [_streamView configurePhoneDragLock:NO];
+    _phoneDragButton.selected = NO;
+    [_phoneDragButton setTitle:@"Drag" forState:UIControlStateNormal];
+}
+
+- (void)sendPhoneCommand:(NSString *)command {
+    NSArray<NSString *> *keys = [command componentsSeparatedByString:@"+"];
+    [[CommandManager shared] sendAutoReleaseComboCommandWithCmdStrings:keys
+        delay:0.025 index:0 pressOnly:NO releaseOnly:NO];
+}
+
+- (void)phoneControlPressed:(UIButton *)button {
+    if (button.tag != 4 && button.tag != 6) [self releasePhoneDrag];
+    switch (button.tag) {
+        case 1: [self sendPhoneCommand:@"WIN+TAB"]; break;
+        case 2: {
+            UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Shortcuts"
+                message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+            __weak StreamFrameViewController *weakSelf = self;
+            for (RemoteCommand *command in [[CommandManager shared] getAllCommands]) {
+                [menu addAction:[UIAlertAction actionWithTitle:command.alias style:UIAlertActionStyleDefault
+                    handler:^(UIAlertAction *action) { [weakSelf sendPhoneCommand:command.cmdString]; }]];
+            }
+            [menu addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+            menu.popoverPresentationController.sourceView = button;
+            menu.popoverPresentationController.sourceRect = button.bounds;
+            [self presentViewController:menu animated:YES completion:nil];
+            break;
+        }
+        case 3: [_streamView toggleSoftKeyboardFromButton]; break;
+        case 4: {
+            BOOL enable = !_streamView.phoneDragLocked;
+            if ([_streamView configurePhoneDragLock:enable]) {
+                button.selected = enable;
+                [button setTitle:enable ? @"Drop" : @"Drag" forState:UIControlStateNormal];
+            } else {
+                [self updateTransientHUDText:@"Drag lock uses Absolute Touch mode"];
+            }
+            break;
+        }
+        case 5: [self expandSettingsView]; break;
+        case 6:
+            _phoneToolbarCollapsed = !_phoneToolbarCollapsed;
+            for (UIView *control in _phoneToolbarStack.arrangedSubviews) {
+                if (control != button) control.hidden = _phoneToolbarCollapsed;
+            }
+            [button setTitle:_phoneToolbarCollapsed ? @"•••" : @"Hide" forState:UIControlStateNormal];
+            button.accessibilityLabel = _phoneToolbarCollapsed ? @"Show phone controls" : @"Hide phone controls";
+            break;
+    }
+}
+
+- (void)installPhoneToolbar {
+    if (!PublicUtils.isIPhone || _phoneToolbar) return;
+    _phoneToolbar = [[UIVisualEffectView alloc] initWithEffect:
+        [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterialDark]];
+    _phoneToolbar.translatesAutoresizingMaskIntoConstraints = NO;
+    _phoneToolbar.layer.cornerRadius = 14;
+    _phoneToolbar.clipsToBounds = YES;
+    _phoneToolbarStack = [[UIStackView alloc] init];
+    _phoneToolbarStack.translatesAutoresizingMaskIntoConstraints = NO;
+    _phoneToolbarStack.spacing = 4;
+    NSArray *titles = @[@"Apps", @"Keys", @"Type", @"Drag", @"Settings", @"Hide"];
+    NSArray *labels = @[@"Switch apps", @"Keyboard shortcuts", @"Show keyboard", @"Arm drag lock", @"Stream settings", @"Hide phone controls"];
+    for (NSInteger i = 0; i < titles.count; i++) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+        button.tag = i + 1;
+        [button setTitle:titles[i] forState:UIControlStateNormal];
+        [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        [button setTitleColor:UIColor.systemYellowColor forState:UIControlStateSelected];
+        button.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        button.accessibilityLabel = labels[i];
+        [button addTarget:self action:@selector(phoneControlPressed:) forControlEvents:UIControlEventTouchUpInside];
+        NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:46];
+        width.priority = 999;
+        width.active = YES;
+        [button.heightAnchor constraintEqualToConstant:44].active = YES;
+        [_phoneToolbarStack addArrangedSubview:button];
+        if (button.tag == 4) _phoneDragButton = button;
+    }
+    [_phoneToolbar.contentView addSubview:_phoneToolbarStack];
+    [self.view addSubview:_phoneToolbar];
+    [NSLayoutConstraint activateConstraints:@[
+        [_phoneToolbar.centerXAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.centerXAnchor],
+        [_phoneToolbar.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:8],
+        [_phoneToolbarStack.leadingAnchor constraintEqualToAnchor:_phoneToolbar.contentView.leadingAnchor constant:6],
+        [_phoneToolbarStack.trailingAnchor constraintEqualToAnchor:_phoneToolbar.contentView.trailingAnchor constant:-6],
+        [_phoneToolbarStack.topAnchor constraintEqualToAnchor:_phoneToolbar.contentView.topAnchor constant:4],
+        [_phoneToolbarStack.bottomAnchor constraintEqualToAnchor:_phoneToolbar.contentView.bottomAnchor constant:-4]
+    ]];
+    if (@available(iOS 15.0, *)) {
+        [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.keyboardLayoutGuide.topAnchor constant:-8].active = YES;
+    } else {
+        [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-8].active = YES;
+    }
+    _floatingKeyboardButton.hidden = YES;
 }
 
 #endif
@@ -1589,6 +1700,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 }
 
 - (void)returnToMainFrame {
+#if !TARGET_OS_TV
+    [self releasePhoneDrag];
+#endif
     if (@available(iOS 13.0, *)) {
         // [ControllerNavigator setUINavigationDelegate:[_mainFrameViewcontroller isInAppView] ? _mainFrameViewcontroller : _mainFrameViewcontroller.hostCollectionVC];
         [ControllerNavigator restorePreviousUINavigationDelegateWithIfCurrentDelegateIs:self];
@@ -1710,6 +1824,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 // This will fire if the user opens control center or gets a low battery message
 - (void)applicationWillResignActive:(NSNotification *)notification {
+#if !TARGET_OS_TV
+    [self releasePhoneDrag];
+#endif
     //[self.pipController startPictureInPicture];
     //sleep(1);
     if(_settings.framePacingMode.intValue == FramePacingModeQueue) appDidEnterBackgroundWithoutPip = true;
@@ -1879,6 +1996,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         // [self->_streamView showOnScreenControls];
         
         [self->_controllerSupport connectionEstablished];
+#if !TARGET_OS_TV
+        [self installPhoneToolbar];
+#endif
         
         if (self->_settings.statsOverlayEnabled) {
             self->_statsUpdateTimer = [NSTimer scheduledTimerWithTimeInterval:1.0f

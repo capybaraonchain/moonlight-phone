@@ -353,7 +353,14 @@ class OSCProfilesManager: NSObject {
         }
 
         
-        return profiles[Int(selectedIndex)] as! OSCProfile
+        let selectedProfile = profiles[Int(selectedIndex)] as! OSCProfile
+        if PublicUtils.isIPhone && !defaults.bool(forKey: "phoneDesktopProfileInitialized") {
+            selectedProfile.touchMode = Int32(TouchMode.absolute.rawValue)
+            selectedProfile.gamepadOverlayEnabled = false
+            persistProfiles(profiles)
+            defaults.set(true, forKey: "phoneDesktopProfileInitialized")
+        }
+        return selectedProfile
 
         // return (profiles.firstObject as? OSCProfile) ?? OSCProfile(name: "", buttonStates: NSMutableArray(), isSelected: false)
     }

@@ -1,30 +1,51 @@
-name: Build VoidLink IPA
+name: Build Moonlight Phone
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "feat/frame_pacing_metal" ]
+    branches: [phone]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build VoidLink IPA
-    runs-on: macos-latest
-
+    runs-on: xcode-27
+    timeout-minutes: 25
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Checkout submodules
-        run: "git submodule update --init --recursive"
-
-      - name: Build VoidLink
-        run: |
-          xcodebuild -verbose -scheme VoidLink -sdk iphoneos -configuration Debug archive -archivePath $PWD/build/VoidLink.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED="NO" CODE_SIGN_ENTITLEMENTS="" CODE_SIGNING_ALLOWED="NO"
-          mkdir -p ./build/IPA && mkdir -p ./build/IPA/Payload
-          cp -r ./build/VoidLink.xcarchive/Products/Applications/VoidLink.app ./build/IPA/Payload/VoidLink.app
-          cd ./build/IPA && zip -r ../../build/VoidLink.ipa ./Payload/* && cd ../..
-
-      - name: Upload VoidLink IPA to Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: VoidLink.ipa
-          path: build/VoidLink.ipa
+          submodules: recursive
+      - name: Build unsigned iPhone application
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild -version
+          xcodebuild -project VoidLink.xcodeproj -scheme VoidLink \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData -archivePath build/MoonlightPhone.xcarchive \
+            archive CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS='' \
+            PRODUCT_BUNDLE_IDENTIFIER=com.capy.moonlightphone \
+            MARKETING_VERSION=2026.11.11 CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            2>&1 | tee build/xcodebuild.log
+          mkdir -p build/IPA/Payload
+          ditto build/MoonlightPhone.xcarchive/Products/Applications/VoidLink.app build/IPA/Payload/VoidLink.app
+          cd build/IPA
+          zip -qry ../Moonlight-Phone.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Moonlight-Phone
+          path: build/Moonlight-Phone.ipa
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build/xcodebuild.log
+          retention-days: 7

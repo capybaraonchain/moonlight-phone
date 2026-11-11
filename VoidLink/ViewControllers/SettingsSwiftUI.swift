@@ -4148,12 +4148,12 @@ final class SettingsSession: NSObject, ObservableObject {
             if (pointSize.width > pointSize.height) != (nativeSize.width > nativeSize.height) {
                 return CGSize(width: nativeSize.height, height: nativeSize.width)
             }
-            return nativeSize
+            return PublicUtils.phoneStreamSize(nativeSize)
         }
-        return CGSize(
+        return PublicUtils.phoneStreamSize(CGSize(
             width: pointSize.width * screen.nativeScale,
             height: pointSize.height * screen.nativeScale
-        )
+        ))
     }
 
     private func nativeSafeAreaResolution(for window: UIWindow) -> CGSize {
@@ -4237,7 +4237,10 @@ final class SettingsSession: NSObject, ObservableObject {
             : preset
         return SettingsVideoResolution(
             presetDimensions: preset, interpolation: interpolation,
-            streamDimensions: submitted,
+            streamDimensions: {
+                let safe = PublicUtils.phoneStreamSize(CGSize(width: CGFloat(submitted.width), height: CGFloat(submitted.height)))
+                return CMVideoDimensions(width: Int32(safe.width), height: Int32(safe.height))
+            }(),
             selection: itemRegistry.usesCustomResolution.value ? 5 : itemRegistry.resolution.value,
             framePacingMode: pacing, streamDimensionScale: scale
         )

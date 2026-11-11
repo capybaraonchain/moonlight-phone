@@ -497,20 +497,18 @@ import UIKit
         //if true {  // save default entries if the data is empty.
         if defaults.data(forKey: "savedCommands") == nil {  // save default entries if the data is empty.
             let defaultCommands: [RemoteCommand] = [
-                RemoteCommand(cmdString: "WIN", alias: "WIN"),
-                RemoteCommand(cmdString: "F11", alias: "F11"),
-                RemoteCommand(cmdString: "ESC", alias: "ESC"),
-                RemoteCommand(cmdString: "CTRL+SHIFT+ESC", alias: "=taskManager"),
-                RemoteCommand(cmdString: "ALT+F1", alias: "=nvidiaShot"),
-                RemoteCommand(cmdString: "ALT+F9", alias: "=nvidiaRec"),
-                RemoteCommand(cmdString: "ALT+F4", alias: "=closeWindow"),
-                RemoteCommand(cmdString: "CTRL+A", alias: "=selectAll"),
-                RemoteCommand(cmdString: "CTRL+C", alias: "=copy"),
-                RemoteCommand(cmdString: "CTRL+V", alias: "=paste"),
-                RemoteCommand(cmdString: "WIN+D", alias: "=switchDesktop"),
-                RemoteCommand(cmdString: "WIN+P", alias: "=projectDisplay"),
-                RemoteCommand(cmdString: "WIN+G", alias: "=xboxGameBar"),
-                RemoteCommand(cmdString: "SHIFT+TAB", alias: "=steamOverlay"),
+                RemoteCommand(cmdString: "WIN+TAB", alias: "Switch apps"),
+                RemoteCommand(cmdString: "WIN+SPACE", alias: "Launcher"),
+                RemoteCommand(cmdString: "CTRL+C", alias: "Copy"),
+                RemoteCommand(cmdString: "CTRL+V", alias: "Paste"),
+                RemoteCommand(cmdString: "CTRL+X", alias: "Cut"),
+                RemoteCommand(cmdString: "CTRL+Z", alias: "Undo"),
+                RemoteCommand(cmdString: "CTRL+SHIFT+Z", alias: "Redo"),
+                RemoteCommand(cmdString: "CTRL+A", alias: "Select all"),
+                RemoteCommand(cmdString: "ESC", alias: "Escape"),
+                RemoteCommand(cmdString: "TAB", alias: "Tab"),
+                RemoteCommand(cmdString: "SHIFT+TAB", alias: "Previous field"),
+                RemoteCommand(cmdString: "ENTER", alias: "Enter"),
             ]
             
             let data = try? NSKeyedArchiver.archivedData(withRootObject: defaultCommands, requiringSecureCoding: false)
