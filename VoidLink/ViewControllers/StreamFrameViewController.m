@@ -1285,7 +1285,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                 message:@"Choose more room for desktop apps, or larger text. Changes apply immediately."
                 preferredStyle:UIAlertControllerStyleActionSheet];
             NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Disconnect"];
-            NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+D", @"WIN+ALT+SPACE"];
+            NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+G", @"WIN+ALT+SPACE"];
             __weak StreamFrameViewController *weakSelf = self;
             for (NSInteger i = 0; i < titles.count; i++) {
                 [menu addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
