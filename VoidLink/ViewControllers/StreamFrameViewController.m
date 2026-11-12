@@ -124,6 +124,11 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     UIButton *_phoneDragButton;
     NSInteger _phoneDragUIState;
     BOOL _phoneToolbarCollapsed;
+    BOOL _phoneStreamReady;
+    BOOL _phoneReconnecting;
+    BOOL _phoneClosing;
+    NSUInteger _phoneRotationGeneration;
+    UILabel *_phoneRotationCover;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
     uint16_t overlayLevel;
@@ -1242,10 +1247,11 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 - (void)phoneDragStateDidChange {
     BOOL locked = _streamView.phoneDragLocked;
     BOOL holding = _streamView.phoneDragHolding;
-    NSInteger state = holding ? 2 : locked ? 1 : 0;
+    BOOL resizing = _streamView.phoneWindowResize;
+    NSInteger state = (holding ? 2 : locked ? 1 : 0) + (resizing ? 3 : 0);
     if (!_phoneDragButton || _phoneDragUIState == state) return;
     _phoneDragUIState = state;
-    NSString *title = holding ? @"Drop" : locked ? @"Pick" : @"Drag";
+    NSString *title = resizing ? @"Done" : holding ? @"Drop" : locked ? @"Pick" : @"Drag";
     _phoneDragButton.selected = locked;
     [_phoneDragButton setTitle:title forState:UIControlStateNormal];
     _phoneDragButton.accessibilityLabel = holding ? @"Drop held item" : locked ? @"Cancel drag selection" : @"Drag an item";
@@ -1253,7 +1259,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         UIButtonConfiguration *config = [_phoneDragButton.configuration copy];
         config.title = title;
         config.baseForegroundColor = locked ? UIColor.systemYellowColor : UIColor.systemBlueColor;
-        config.image = [UIImage systemImageNamed:holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
+        config.image = [UIImage systemImageNamed:resizing ? @"arrow.up.left.and.arrow.down.right" : holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
         _phoneDragButton.configuration = config;
     }
 }
@@ -1272,7 +1278,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 - (void)phoneControlPressed:(UIButton *)button {
     [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
     // Keep the mouse held while switching to a destination app during a drag.
-    if (button.tag == 3 || button.tag == 5) [self releasePhoneDrag];
+    if (button.tag == 3 || button.tag == 5 || (_streamView.phoneWindowResize && button.tag != 4)) [self releasePhoneDrag];
     switch (button.tag) {
         case 1:
             [self sendPhoneCommand:_streamView.phoneDragLocked ? @"WIN+TAB" : @"WIN+ALT+CTRL+A"];
@@ -1304,7 +1310,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Your desktop"
                 message:@"Choose more room for desktop apps, or larger text. Changes apply immediately."
                 preferredStyle:UIAlertControllerStyleActionSheet];
-            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Disconnect"];
+            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Resize window", @"Disconnect"];
             NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+G", @"WIN+ALT+SPACE"];
             __weak StreamFrameViewController *weakSelf = self;
             for (NSInteger i = 0; i < titles.count; i++) {
@@ -1320,7 +1326,11 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                     } else if (i == 6) {
                         [vc resetMagnifierStreamViewWithAnimated:YES];
                     } else if (i == 7) [vc expandSettingsView];
-                    else [vc returnToMainFrame];
+                    else if (i == 8) {
+                        [vc sendPhoneCommand:@"WIN+ALT+CTRL+SHIFT+E"];
+                        [vc->_streamView configurePhoneWindowResize];
+                        [vc updateTransientHUDText:@"Touch inside the window and drag to resize. Tap Done when finished."];
+                    } else [vc returnToMainFrame];
                 }]];
             }
             [menu addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
@@ -1338,6 +1348,56 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             button.accessibilityLabel = _phoneToolbarCollapsed ? @"Show phone controls" : @"Hide phone controls";
             break;
     }
+}
+
+- (void)requestPhoneRotationIfNeeded {
+    if (!PublicUtils.isIPhone || ![self.streamConfig.appName isEqualToString:@"Desktop"] ||
+        !_phoneStreamReady || _phoneReconnecting || _phoneClosing) return;
+    BOOL portrait = self.view.bounds.size.height > self.view.bounds.size.width;
+    if (portrait == (self.streamConfig.height > self.streamConfig.width)) return;
+    NSUInteger generation = ++_phoneRotationGeneration;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        typeof(self) self = weakSelf;
+        if (!self || self->_phoneRotationGeneration != generation || !self->_phoneStreamReady || self->_phoneClosing) return;
+        BOOL finalPortrait = self.view.bounds.size.height > self.view.bounds.size.width;
+        if (finalPortrait == (self.streamConfig.height > self.streamConfig.width)) return;
+        [self releasePhoneDrag];
+        [self->_streamView cancelPhoneTouches];
+        if (self->micHandler) { [self->micHandler clean]; self->micHandler = nil; }
+        self->_phoneReconnecting = YES;
+        self->_phoneStreamReady = NO;
+        self->_streamView.userInteractionEnabled = NO;
+        [self->_statsUpdateTimer invalidate]; self->_statsUpdateTimer = nil;
+        self->_phoneRotationCover = [[UILabel alloc] initWithFrame:self.view.bounds];
+        self->_phoneRotationCover.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        self->_phoneRotationCover.backgroundColor = [UIColor colorWithWhite:0.07 alpha:0.94];
+        self->_phoneRotationCover.textColor = UIColor.whiteColor;
+        self->_phoneRotationCover.textAlignment = NSTextAlignmentCenter;
+        self->_phoneRotationCover.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+        self->_phoneRotationCover.text = @"Rotating desktop…";
+        [self.view addSubview:self->_phoneRotationCover];
+        [self.view bringSubviewToFront:self->_phoneToolbar];
+        // Arm a bounded host lease before closing video; the fresh launch below
+        // negotiates dimensions and runs preparation before the encoder starts.
+        [self sendPhoneCommand:@"WIN+ALT+CTRL+SHIFT+R"];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self->_phoneClosing) return;
+            [self->_streamMan stopStreamWithCompletion:^{
+                if (self->_phoneClosing || !self.view.window) return;
+                CGSize native = [PublicUtils phoneStreamSize:UIScreen.mainScreen.nativeBounds.size];
+                BOOL nowPortrait = self.view.bounds.size.height > self.view.bounds.size.width;
+                self.streamConfig.width = (int)(nowPortrait ? MIN(native.width,native.height) : MAX(native.width,native.height));
+                self.streamConfig.height = (int)(nowPortrait ? MAX(native.width,native.height) : MIN(native.width,native.height));
+                self->_streamView.streamAspectRatio = (CGFloat)self.streamConfig.width / self.streamConfig.height;
+                [self resetMagnifierStreamViewWithAnimated:NO];
+                [self handleViewResize];
+                self->_streamMan = [[StreamManager alloc] initWithConfig:self.streamConfig renderView:self->_streamVideoRenderView connectionCallbacks:self];
+                NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+                [queue addOperation:self->_streamMan];
+            }];
+        });
+    });
 }
 
 - (void)installPhoneToolbar {
@@ -1395,9 +1455,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         [_phoneToolbarStack.bottomAnchor constraintEqualToAnchor:_phoneToolbar.contentView.bottomAnchor constant:-4]
     ]];
     if (@available(iOS 15.0, *)) {
-        [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.keyboardLayoutGuide.topAnchor constant:-8].active = YES;
+        [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.keyboardLayoutGuide.topAnchor constant:6].active = YES;
     } else {
-        [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-8].active = YES;
+        [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:6].active = YES;
     }
     _floatingKeyboardButton.hidden = YES;
 }
@@ -1785,6 +1845,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 - (void)returnToMainFrame {
 #if !TARGET_OS_TV
+    _phoneClosing = YES;
+    ++_phoneRotationGeneration;
+    [_streamView cancelPhoneTouches];
     [self releasePhoneDrag];
 #endif
     if (@available(iOS 13.0, *)) {
@@ -1908,6 +1971,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 // This will fire if the user opens control center or gets a low battery message
 - (void)applicationWillResignActive:(NSNotification *)notification {
+    [_streamView cancelPhoneTouches];
     [self updateTransientHUDText:nil];
 #if !TARGET_OS_TV
     [self releasePhoneDrag];
@@ -2089,6 +2153,12 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         [self->_controllerSupport connectionEstablished];
 #if !TARGET_OS_TV
         [self installPhoneToolbar];
+        self->_phoneStreamReady = YES;
+        self->_phoneReconnecting = NO;
+        self->_streamView.userInteractionEnabled = YES;
+        [self->_phoneRotationCover removeFromSuperview];
+        self->_phoneRotationCover = nil;
+        [self requestPhoneRotationIfNeeded];
 #endif
         
         if (self->_settings.statsOverlayEnabled) {
@@ -2287,6 +2357,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 }
 
 - (void) stageFailed:(const char*)stageName withError:(int)errorCode portTestFlags:(int)portTestFlags {
+#if !TARGET_OS_TV
+    dispatch_async(dispatch_get_main_queue(), ^{ [self->_phoneRotationCover removeFromSuperview]; self->_phoneRotationCover = nil; self->_phoneReconnecting = NO; });
+#endif
 #if TARGET_OS_TV
     void (^stopMic)(void) = ^{
         self->_tvMicStopped = YES;
@@ -2328,6 +2401,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 }
 
 - (void) launchFailed:(NSString*)message {
+#if !TARGET_OS_TV
+    dispatch_async(dispatch_get_main_queue(), ^{ [self->_phoneRotationCover removeFromSuperview]; self->_phoneRotationCover = nil; self->_phoneReconnecting = NO; });
+#endif
     Log(LOG_I, @"Launch failed: %@", message);
     
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -2717,6 +2793,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                 [self reConfigStreamViewRealtimeAndReloadSettings:YES reloadOnscreenWidgets:NO];
                 [self updateMagnifierViewportMetrics];
                 [self resetMagnifierStreamViewWithAnimated:NO];
+#if !TARGET_OS_TV
+                [self requestPhoneRotationIfNeeded];
+#endif
             }];
             [CATransaction commit];
         });

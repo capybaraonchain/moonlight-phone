@@ -136,11 +136,13 @@
         }
     }
     
+    if (self.isCancelled) return;
     // Populate RTSP session URL from launch/resume response
     _config.rtspSessionUrl = sessionUrl;
     
     // Initializing the renderer must be done on the main thread
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.isCancelled) return;
         self->_videoRenderer = [[VideoDecoderRenderer alloc] initWithView:self->_renderView callbacks:self->_callbacks streamAspectRatio:(float)self->_config.width / (float)self->_config.height];
 
         self->_connection = [[Connection alloc] initWithConfig:self->_config renderer:self->_videoRenderer connectionCallbacks:self->_callbacks];
@@ -155,10 +157,13 @@
     _videoRenderer.needRequeuing = needRequeuing;
 }
 
-- (void) stopStream
-{
-    [_connection terminate];
+- (void) stopStream { [self stopStreamWithCompletion:nil]; }
+
+- (void) stopStreamWithCompletion:(void (^)(void))completion {
+    [self cancel];
     _callbacks = nil;
+    if (_connection) [_connection terminateWithCompletion:completion];
+    else if (completion) dispatch_async(dispatch_get_main_queue(), completion);
 }
 
 - (BOOL) launchApp:(HttpManager*)hMan receiveSessionUrl:(NSString**)sessionUrl {

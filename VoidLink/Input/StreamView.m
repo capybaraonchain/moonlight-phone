@@ -83,6 +83,9 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
     UIResponder* sessionTouchHandler;
 #if !TARGET_OS_TV
     AbsoluteTouchHandler* phoneDragHandler;
+    BOOL phoneDesktopInput;
+    NSMutableDictionary<NSValue *, NSNumber *> *phoneTouchIDs;
+    AbsoluteTouchHandler *phoneTouchFallback;
 #endif
 
     NSTimer* interactionTimer;
@@ -170,6 +173,9 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
     _widgetSizeTransition = WidgetSizeTransitionKeepWidgetSize;
     
     settings = [[[DataManager alloc] init] getSettings];
+#if !TARGET_OS_TV
+    phoneDesktopInput = PublicUtils.isIPhone && [streamConfig.appName isEqualToString:@"Desktop"];
+#endif
     
     localMousePointerMode = streamConfig.localMousePointerMode;
     
@@ -292,6 +298,7 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
 }
 
 - (void)updateTouchHandlerWithProfile:(OSCProfile* )profile{
+    [self cancelPhoneTouches];
     [self configurePhoneDragLock:NO];
 #if TARGET_OS_TV
     touchMode = TouchModeDisabled;
@@ -1374,6 +1381,7 @@ static CGFloat previousRollAngle = 0;
         [phoneDragHandler touchesBegan:touches withEvent:event];
         return;
     }
+    if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_DOWN]) return;
 
     // if (@available(iOS 13.4, *)) {
     // cancel restriction of native touch for iOS13.3 & lower
@@ -1552,6 +1560,7 @@ static CGFloat previousRollAngle = 0;
         [phoneDragHandler touchesMoved:touches withEvent:event];
         return;
     }
+    if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_MOVE]) return;
 
     
     if (touchMode == TouchModeNativeOnly) {
@@ -1727,6 +1736,7 @@ static CGFloat previousRollAngle = 0;
         [phoneDragHandler touchesEnded:touches withEvent:event];
         return;
     }
+    if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_UP]) return;
 
 
     if (touchMode == TouchModeNativeOnly) {
@@ -1775,6 +1785,7 @@ static CGFloat previousRollAngle = 0;
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
 #if !TARGET_OS_TV
+    if (phoneTouchIDs.count) { [self cancelPhoneTouches]; return; }
     if (phoneDragHandler.phoneDragLocked) [phoneDragHandler touchesCancelled:touches withEvent:event];
 #endif
     [touchHandler touchesCancelled:touches withEvent:event];
@@ -2169,6 +2180,70 @@ static CGFloat previousRollAngle = 0;
 #endif
 }
 
+- (void)cancelPhoneTouches {
+#if !TARGET_OS_TV
+    if (phoneTouchIDs.count) LiSendTouchEvent(LI_TOUCH_EVENT_CANCEL_ALL, 0, 0, 0, 0, 0, 0, 0);
+    [phoneTouchIDs removeAllObjects];
+#endif
+}
+
+- (BOOL)phoneWindowResize {
+#if TARGET_OS_TV
+    return NO;
+#else
+    return phoneDragHandler.phoneWindowResize && phoneDragHandler.phoneDragLocked;
+#endif
+}
+
+- (void)configurePhoneWindowResize {
+#if !TARGET_OS_TV
+    [self configurePhoneDragLock:NO];
+    [self configurePhoneDragLock:YES];
+    phoneDragHandler.phoneWindowResize = YES;
+    [self phoneDragStateDidChange];
+#endif
+}
+
+#if !TARGET_OS_TV
+- (BOOL)sendPhoneTouches:(NSSet<UITouch *> *)touches event:(UIEvent *)event type:(uint8_t)type {
+    if (!phoneDesktopInput || (touchMode != TouchModeNative && touchMode != TouchModeNativeOnly) ||
+        ((UITouch *)touches.anyObject).type != UITouchTypeDirect) return NO;
+    if (!(LiGetHostFeatureFlags() & LI_FF_PEN_TOUCH_EVENTS)) {
+        if (!phoneTouchFallback) phoneTouchFallback = [[AbsoluteTouchHandler alloc] initWithView:self andSettings:settings];
+        if (type == LI_TOUCH_EVENT_DOWN) [phoneTouchFallback touchesBegan:touches withEvent:event];
+        else if (type == LI_TOUCH_EVENT_MOVE) [phoneTouchFallback touchesMoved:touches withEvent:event];
+        else [phoneTouchFallback touchesEnded:touches withEvent:event];
+        return YES;
+    }
+    if (!phoneTouchIDs) phoneTouchIDs = [NSMutableDictionary dictionary];
+    StreamInputGeometry geometry = self.inputGeometry;
+    CGRect video = geometry.videoRect;
+    if (video.size.width <= 0 || video.size.height <= 0) return YES;
+    for (UITouch *touch in touches) {
+        if (touch.type != UITouchTypeDirect) continue;
+        NSValue *key = [NSValue valueWithNonretainedObject:touch];
+        NSNumber *pointer = phoneTouchIDs[key];
+        if (type == LI_TOUCH_EVENT_DOWN && !pointer) {
+            for (int i = 0; i < 10; i++) {
+                if (![phoneTouchIDs.allValues containsObject:@(i)]) { pointer = @(i); break; }
+            }
+            if (pointer) phoneTouchIDs[key] = pointer;
+        }
+        if (!pointer) continue;
+        CGPoint point = [touch locationInView:self];
+        float x = fminf(1, fmaxf(0, (point.x - video.origin.x) / video.size.width));
+        float y = fminf(1, fmaxf(0, (point.y - video.origin.y) / video.size.height));
+        // UIKit calls stay on the main thread; the transport queues immutable events.
+        LiSendTouchEvent(type, pointer.unsignedIntValue, x, y,
+            type == LI_TOUCH_EVENT_UP ? 0 : 0.5f, 0, 0, 0);
+        if (type == LI_TOUCH_EVENT_UP) [phoneTouchIDs removeObjectForKey:key];
+    }
+    if (type == LI_TOUCH_EVENT_DOWN) [self startInteractionTimer];
+    else hasUserInteracted = YES;
+    return YES;
+}
+#endif
+
 - (BOOL)phoneDragLocked {
 #if TARGET_OS_TV
     return NO;
@@ -2196,11 +2271,13 @@ static CGFloat previousRollAngle = 0;
     return NO;
 #else
     if (locked) {
+        [self cancelPhoneTouches];
         if ([sessionTouchHandler isKindOfClass:[RelativeTouchHandler class]])
             [(RelativeTouchHandler *)sessionTouchHandler reset];
         [_streamFrameVC setMagnifierViewportInteractionEnabled:NO];
         if (!phoneDragHandler) phoneDragHandler = [[AbsoluteTouchHandler alloc] initWithView:self andSettings:settings];
     }
+    if (locked) phoneDragHandler.phoneWindowResize = NO;
     phoneDragHandler.phoneDragLocked = locked;
     return YES;
 #endif
@@ -2242,6 +2319,7 @@ static CGFloat previousRollAngle = 0;
 #endif
 
 - (void)cleanUp{
+    [self cancelPhoneTouches];
     [self configurePhoneDragLock:NO];
 #if TARGET_OS_TV
     tvOSRemoteTextInputLoopActive = NO;

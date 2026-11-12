@@ -773,6 +773,8 @@ int DrSubmitDecodeUnit(PDECODE_UNIT decodeUnit);
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [self->_frameQueue stopForOwner:self];
+        [self->_displayLayer removeFromSuperlayer];
+        self->_displayLayer = nil;
         
         if (self->_renderingBackend == RENDER_AVSB) {
             [self->_displayLink invalidate];

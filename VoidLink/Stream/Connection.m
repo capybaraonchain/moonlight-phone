@@ -28,6 +28,8 @@
 #include "VoidLink-Swift.h"
 
 @implementation Connection {
+    dispatch_group_t _terminationGroup;
+    BOOL _terminationRequested;
     SERVER_INFORMATION _serverInfo;
     STREAM_CONFIGURATION _streamConfig;
     CONNECTION_LISTENER_CALLBACKS _clCallbacks;
@@ -847,8 +849,22 @@ void ClDs5HapticsIrV2(const LI_DS5_HAPTICS_IR_FRAME_V2* frame)
                                                     laneCorrelation:frame->laneCorrelation];
 }
 
--(void) terminate
+-(void) terminate { [self terminateWithCompletion:nil]; }
+
+-(void) terminateWithCompletion:(void (^)(void))completion
 {
+    @synchronized (self) {
+        if (!_terminationGroup) _terminationGroup = dispatch_group_create();
+        if (_terminationRequested) {
+            if (completion) dispatch_group_notify(_terminationGroup, dispatch_get_main_queue(), completion);
+            return;
+        }
+        _terminationRequested = YES;
+        dispatch_group_enter(_terminationGroup);
+    }
+    // Intentional teardown must not deliver an old connection's alerts to the
+    // controller while it reconnects at a new orientation.
+    _callbacks = nil;
 #if TARGET_OS_TV
     _audioPlaybackTerminated = YES;
 #endif
@@ -873,6 +889,8 @@ void ClDs5HapticsIrV2(const LI_DS5_HAPTICS_IR_FRAME_V2* frame)
         [initLock lock];
         LiStopConnection();
         [initLock unlock];
+        dispatch_group_leave(self->_terminationGroup);
+        if (completion) dispatch_async(dispatch_get_main_queue(), completion);
     });
 }
 

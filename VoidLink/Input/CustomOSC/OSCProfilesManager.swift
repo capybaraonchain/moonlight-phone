@@ -360,6 +360,12 @@ class OSCProfilesManager: NSObject {
             persistProfiles(profiles)
             defaults.set(true, forKey: "phoneDesktopProfileInitialized")
         }
+        if PublicUtils.isIPhone && !defaults.bool(forKey: "phoneNativeTouchV3") {
+            selectedProfile.touchMode = Int32(TouchMode.native.rawValue)
+            selectedProfile.pointerVelocityModeDivider = 1.0
+            persistProfiles(profiles)
+            defaults.set(true, forKey: "phoneNativeTouchV3")
+        }
         return selectedProfile
 
         // return (profiles.firstObject as? OSCProfile) ?? OSCProfile(name: "", buttonStates: NSMutableArray(), isSelected: false)
