@@ -123,6 +123,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     UIVisualEffectView *_phoneToolbar;
     UIStackView *_phoneToolbarStack;
     UIButton *_phoneDragButton;
+    UIButton *_phoneResizeButton;
     NSInteger _phoneDragUIState;
     BOOL _phoneToolbarCollapsed;
     BOOL _phoneStreamReady;
@@ -1364,20 +1365,29 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 - (void)phoneDragStateDidChange {
     BOOL locked = _streamView.phoneDragLocked;
     BOOL holding = _streamView.phoneDragHolding;
-    BOOL resizing = _phoneWindowMode != nil;
-    NSInteger state = (holding ? 2 : locked ? 1 : 0) + (resizing ? 3 : 0);
+    BOOL adjusting = _phoneWindowMode != nil;
+    NSInteger state = (holding ? 2 : locked ? 1 : 0) + (adjusting ? 3 : 0);
     if (!_phoneDragButton || _phoneDragUIState == state) return;
     _phoneDragUIState = state;
-    NSString *title = resizing ? @"Done" : holding ? @"Drop" : locked ? @"Pick" : @"Drag";
-    _phoneDragButton.selected = locked || resizing;
+    NSString *title = holding ? @"Drop" : locked ? @"Pick" : @"Drag";
+    _phoneDragButton.selected = locked;
     [_phoneDragButton setTitle:title forState:UIControlStateNormal];
-    _phoneDragButton.accessibilityLabel = resizing ? @"Finish adjusting window" : holding ? @"Drop held item" : locked ? @"Cancel drag selection" : @"Drag an item";
+    _phoneDragButton.accessibilityLabel = holding ? @"Drop held item" : locked ? @"Cancel drag selection" : @"Drag an item";
+    NSString *resizeTitle = adjusting ? @"Done" : @"Resize";
+    [_phoneResizeButton setTitle:resizeTitle forState:UIControlStateNormal];
+    _phoneResizeButton.selected = adjusting;
+    _phoneResizeButton.accessibilityLabel = adjusting ? @"Finish adjusting window" : @"Resize selected window";
     if (@available(iOS 15.0, *)) {
         UIButtonConfiguration *config = [_phoneDragButton.configuration copy];
         config.title = title;
-        config.baseForegroundColor = (locked || resizing) ? UIColor.systemYellowColor : UIColor.systemBlueColor;
-        config.image = [UIImage systemImageNamed:resizing ? ([_phoneWindowMode isEqualToString:@"move"] ? @"arrow.up.and.down.and.arrow.left.and.right" : @"arrow.up.left.and.arrow.down.right") : holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
+        config.baseForegroundColor = locked ? UIColor.systemYellowColor : UIColor.systemBlueColor;
+        config.image = [UIImage systemImageNamed:holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
         _phoneDragButton.configuration = config;
+        UIButtonConfiguration *resizeConfig = [_phoneResizeButton.configuration copy];
+        resizeConfig.title = resizeTitle;
+        resizeConfig.baseForegroundColor = adjusting ? UIColor.systemYellowColor : UIColor.systemBlueColor;
+        resizeConfig.image = [UIImage systemImageNamed:adjusting ? @"checkmark.circle.fill" : @"arrow.up.left.and.arrow.down.right"];
+        _phoneResizeButton.configuration = resizeConfig;
     }
 }
 
@@ -1396,29 +1406,14 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 - (void)phoneControlPressed:(UIButton *)button {
     [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
     // Keep the mouse held while switching to a destination app during a drag.
-    if (button.tag == 3 || button.tag == 5 || (_phoneWindowMode && button.tag != 4)) [self releasePhoneDrag];
+    if (button.tag == 3 || button.tag == 5 || button.tag == 8 || (_phoneWindowMode && button.tag != 7)) [self releasePhoneDrag];
     switch (button.tag) {
         case 1:
             [self sendPhoneCommand:_streamView.phoneDragLocked ? @"WIN+TAB" : @"WIN+ALT+CTRL+A"];
             if (_streamView.phoneDragLocked) [self updateTransientHUDText:@"Drag held · Apps switches to the next app · Drop releases"];
             break;
-        case 2: {
-            UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Shortcuts"
-                message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-            __weak StreamFrameViewController *weakSelf = self;
-            for (RemoteCommand *command in [[CommandManager shared] getAllCommands]) {
-                [menu addAction:[UIAlertAction actionWithTitle:command.alias style:UIAlertActionStyleDefault
-                    handler:^(UIAlertAction *action) { [weakSelf sendPhoneCommand:command.cmdString]; }]];
-            }
-            [menu addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-            menu.popoverPresentationController.sourceView = button;
-            menu.popoverPresentationController.sourceRect = button.bounds;
-            [self presentViewController:menu animated:YES completion:nil];
-            break;
-        }
         case 3: [_streamView toggleSoftKeyboardFromButton]; break;
         case 4: {
-            if (_phoneWindowMode) { [self endPhoneWindowTool]; break; }
             BOOL enable = !_streamView.phoneDragLocked;
             [_streamView configurePhoneDragLock:enable];
             [self phoneDragStateDidChange];
@@ -1429,15 +1424,20 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Your desktop"
                 message:@"Move or resize the selected window with your finger. Choose a layout for more room or larger text."
                 preferredStyle:UIAlertControllerStyleActionSheet];
-            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Move window", @"Resize window", @"Disconnect"];
-            NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+G", @"WIN+ALT+SPACE"];
+            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Keyboard shortcuts", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Move window", @"Disconnect"];
+            NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+G"];
             __weak StreamFrameViewController *weakSelf = self;
             for (NSInteger i = 0; i < titles.count; i++) {
                 [menu addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
                     StreamFrameViewController *vc = weakSelf;
                     if (!vc) return;
                     if (i < commands.count) [vc sendPhoneCommand:commands[i]];
-                    else if (i == 5) {
+                    else if (i == 4) {
+                        // Present after the action sheet finishes dismissing.
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [vc showPhoneShortcutsFromButton:button];
+                        });
+                    } else if (i == 5) {
                         vc->_magnifierViewportInteractionActive = YES;
                         [vc updateScrollViewInteractionState];
                         [vc applyMagnifierTranslation:CGVectorMake(0, 0) pinchDelta:120];
@@ -1445,9 +1445,8 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                     } else if (i == 6) {
                         [vc resetMagnifierStreamViewWithAnimated:YES];
                     } else if (i == 7) [vc expandSettingsView];
-                    else if (i == 8 || i == 9) {
-                        [vc beginPhoneWindowTool:i == 8 ? @"move" : @"resize"];
-                    } else [vc returnToMainFrame];
+                    else if (i == 8) [vc beginPhoneWindowTool:@"move"];
+                    else [vc returnToMainFrame];
                 }]];
             }
             [menu addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
@@ -1464,7 +1463,32 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             [button setTitle:_phoneToolbarCollapsed ? @"•••" : @"Hide" forState:UIControlStateNormal];
             button.accessibilityLabel = _phoneToolbarCollapsed ? @"Show phone controls" : @"Hide phone controls";
             break;
+        case 7:
+            if (_phoneWindowMode) [self endPhoneWindowTool];
+            else [self beginPhoneWindowTool:@"resize"];
+            break;
+        case 8:
+            [self sendPhoneCommand:@"WIN+ALT+SPACE"];
+            break;
     }
+}
+
+- (void)showPhoneShortcutsFromButton:(UIButton *)button {
+    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Shortcuts"
+        message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak StreamFrameViewController *weakSelf = self;
+    for (RemoteCommand *command in [[CommandManager shared] getAllCommands]) {
+        [menu addAction:[UIAlertAction actionWithTitle:command.alias style:UIAlertActionStyleDefault
+            handler:^(UIAlertAction *action) { [weakSelf sendPhoneCommand:command.cmdString]; }]];
+    }
+    [menu addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    menu.popoverPresentationController.sourceView = button;
+    menu.popoverPresentationController.sourceRect = button.bounds;
+    if (self.presentedViewController) {
+        [self dismissViewControllerAnimated:YES completion:^{
+            [self presentViewController:menu animated:YES completion:nil];
+        }];
+    } else [self presentViewController:menu animated:YES completion:nil];
 }
 
 - (void)requestPhoneRotationIfNeeded {
@@ -1527,18 +1551,19 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     _phoneToolbar.clipsToBounds = YES;
     _phoneToolbarStack = [[UIStackView alloc] init];
     _phoneToolbarStack.translatesAutoresizingMaskIntoConstraints = NO;
-    _phoneToolbarStack.spacing = 6;
-    NSArray *titles = @[@"Apps", @"Keys", @"Type", @"Drag", @"More", @"Hide"];
-    NSArray *labels = @[@"Switch apps", @"Keyboard shortcuts", @"Show keyboard", @"Arm drag lock", @"Desktop layout, zoom, agent desktops and settings", @"Hide phone controls"];
+    _phoneToolbarStack.spacing = 4;
+    NSArray *titles = @[@"Apps", @"Launch", @"Type", @"Drag", @"Resize", @"More", @"Hide"];
+    NSArray *tags = @[@1, @8, @3, @4, @7, @5, @6];
+    NSArray *labels = @[@"Switch apps", @"Launch an app", @"Show keyboard", @"Arm drag lock", @"Resize selected window", @"Keyboard shortcuts, desktop layout, zoom, agent desktops and settings", @"Hide phone controls"];
+    NSArray *symbols = @[@"square.grid.2x2", @"plus.app", @"keyboard", @"hand.draw", @"arrow.up.left.and.arrow.down.right", @"ellipsis.circle", @"chevron.down"];
     for (NSInteger i = 0; i < titles.count; i++) {
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        button.tag = i + 1;
+        button.tag = [tags[i] integerValue];
         [button setTitle:titles[i] forState:UIControlStateNormal];
         [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         [button setTitleColor:UIColor.systemYellowColor forState:UIControlStateSelected];
         button.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
         if (@available(iOS 15.0, *)) {
-            NSArray *symbols = @[@"square.grid.2x2", @"command", @"keyboard", @"hand.draw", @"ellipsis.circle", @"chevron.down"];
             UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
             config.image = [UIImage systemImageNamed:symbols[i]];
             config.preferredSymbolConfigurationForImage = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
@@ -1554,18 +1579,20 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         }
         button.accessibilityLabel = labels[i];
         [button addTarget:self action:@selector(phoneControlPressed:) forControlEvents:UIControlEventTouchUpInside];
-        NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:46];
+        NSLayoutConstraint *width = [button.widthAnchor constraintEqualToConstant:44];
         width.priority = 999;
         width.active = YES;
         [button.heightAnchor constraintEqualToConstant:56].active = YES;
         [_phoneToolbarStack addArrangedSubview:button];
         if (button.tag == 4) _phoneDragButton = button;
+        if (button.tag == 7) _phoneResizeButton = button;
     }
     [_phoneToolbar.contentView addSubview:_phoneToolbarStack];
     [self.view addSubview:_phoneToolbar];
     [NSLayoutConstraint activateConstraints:@[
         [_phoneToolbar.centerXAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.centerXAnchor],
         [_phoneToolbar.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:8],
+        [_phoneToolbar.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-8],
         [_phoneToolbarStack.leadingAnchor constraintEqualToAnchor:_phoneToolbar.contentView.leadingAnchor constant:6],
         [_phoneToolbarStack.trailingAnchor constraintEqualToAnchor:_phoneToolbar.contentView.trailingAnchor constant:-6],
         [_phoneToolbarStack.topAnchor constraintEqualToAnchor:_phoneToolbar.contentView.topAnchor constant:4],
