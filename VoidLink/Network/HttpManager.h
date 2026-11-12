@@ -34,6 +34,9 @@
 - (void) executeRequestSynchronously:(HttpRequest*)request deadline:(dispatch_time_t)deadline;
 // Cancels active requests and prevents this manager from starting another request.
 - (void)cancelRequests;
+// Dedicated paired, pinned HTTPS channel; keeps one connection for touch updates.
+- (void)phoneWindowRequest:(NSDictionary *)body completion:(void (^)(NSDictionary *, NSError *))completion;
+- (void)closePhoneWindowSession;
 
 @end
 

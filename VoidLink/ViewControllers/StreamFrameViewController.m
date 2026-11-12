@@ -29,6 +29,7 @@
 #import "LocalizationHelper.h"
 #import "VoidLink-Swift.h"
 #import "NativeTouchPointer.h"
+#import "HttpManager.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -129,6 +130,13 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     BOOL _phoneClosing;
     NSUInteger _phoneRotationGeneration;
     UILabel *_phoneRotationCover;
+    HttpManager *_phoneWindowHTTP;
+    NSString *_phoneWindowMode, *_phoneWindowToken;
+    NSTimer *_phoneWindowTimer;
+    CGPoint _phoneWindowDelta, _phoneWindowSent;
+    CGSize _phoneWindowDesktopSize;
+    NSUInteger _phoneWindowSequence, _phoneWindowGeneration;
+    BOOL _phoneWindowBusy;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
     uint16_t overlayLevel;
@@ -1244,27 +1252,123 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     }
 }
 
+- (void)beginPhoneWindowTool:(NSString *)mode {
+    [self releasePhoneDrag];
+    [self resetMagnifierStreamViewWithAnimated:NO];
+    _phoneWindowMode = mode;
+    _phoneWindowDelta = CGPointZero;
+    _phoneWindowSent = CGPointZero;
+    _phoneWindowSequence = 0;
+    _phoneWindowBusy = YES;
+    _streamView.phoneWindowControlActive = YES;
+    NSUInteger generation = ++_phoneWindowGeneration;
+    HttpManager *manager = [[HttpManager alloc] initWithAddress:self.streamConfig.host
+        httpsPort:self.streamConfig.httpsPort serverCert:self.streamConfig.serverCert];
+    _phoneWindowHTTP = manager;
+    [self phoneDragStateDidChange];
+    [self updateTransientHUDText:@"Selecting window…"];
+    __weak typeof(self) weakSelf = self;
+    [manager phoneWindowRequest:@{@"action":@"begin", @"mode":mode} completion:^(NSDictionary *result, NSError *error) {
+        typeof(self) self = weakSelf;
+        if (!self || self->_phoneWindowGeneration != generation) {
+            if (result[@"token"]) [manager phoneWindowRequest:@{@"action":@"end", @"token":result[@"token"]}
+                completion:^(NSDictionary *r, NSError *e) { [manager closePhoneWindowSession]; }];
+            else [manager closePhoneWindowSession];
+            return;
+        }
+        self->_phoneWindowBusy = NO;
+        if (error || ![result[@"token"] isKindOfClass:NSString.class]) {
+            [self endPhoneWindowTool];
+            [self updateTransientHUDText:error.localizedDescription ?: @"Could not select this window."];
+            return;
+        }
+        self->_phoneWindowToken = result[@"token"];
+        self->_phoneWindowDesktopSize = CGSizeMake([result[@"width"] doubleValue], [result[@"height"] doubleValue]);
+        self->_streamView.phoneWindowPan = ^(CGPoint delta) {
+            typeof(self) self = weakSelf;
+            if (!self || !self->_phoneWindowToken) return;
+            CGRect video = self->_streamView.inputGeometry.videoRect;
+            if (video.size.width < 1 || video.size.height < 1) return;
+            self->_phoneWindowDelta.x += delta.x * self->_phoneWindowDesktopSize.width / video.size.width;
+            self->_phoneWindowDelta.y += delta.y * self->_phoneWindowDesktopSize.height / video.size.height;
+        };
+        self->_phoneWindowTimer = [NSTimer scheduledTimerWithTimeInterval:1.0/30.0 repeats:YES block:^(NSTimer *timer) {
+            [weakSelf flushPhoneWindowTool];
+        }];
+        NSString *verb = [mode isEqualToString:@"move"] ? @"move" : @"resize";
+        [self updateTransientHUDText:[NSString stringWithFormat:@"Slide anywhere to %@ the selected window. Tap Done to finish.", verb]];
+    }];
+}
+
+- (void)flushPhoneWindowTool {
+    if (!_phoneWindowToken || _phoneWindowBusy || CGPointEqualToPoint(_phoneWindowDelta, _phoneWindowSent)) return;
+    _phoneWindowBusy = YES;
+    _phoneWindowSent = _phoneWindowDelta;
+    NSUInteger generation = _phoneWindowGeneration;
+    __weak typeof(self) weakSelf = self;
+    [_phoneWindowHTTP phoneWindowRequest:@{@"action":@"update", @"token":_phoneWindowToken,
+        @"seq":@(++_phoneWindowSequence), @"dx":@(_phoneWindowDelta.x), @"dy":@(_phoneWindowDelta.y)}
+        completion:^(NSDictionary *result, NSError *error) {
+            typeof(self) self = weakSelf;
+            if (!self || self->_phoneWindowGeneration != generation) return;
+            self->_phoneWindowBusy = NO;
+            if (error) {
+                [self endPhoneWindowTool];
+                [self updateTransientHUDText:error.localizedDescription];
+            } else {
+                // Remove overscroll at the work-area edge, while retaining any
+                // finger travel accumulated since this update went out.
+                CGPoint actual = CGPointMake([result[@"dx"] doubleValue], [result[@"dy"] doubleValue]);
+                self->_phoneWindowDelta.x += actual.x - self->_phoneWindowSent.x;
+                self->_phoneWindowDelta.y += actual.y - self->_phoneWindowSent.y;
+                self->_phoneWindowSent = actual;
+            }
+        }];
+}
+
+- (void)endPhoneWindowTool {
+    if (!_phoneWindowMode) return;
+    ++_phoneWindowGeneration;
+    [_phoneWindowTimer invalidate]; _phoneWindowTimer = nil;
+    _streamView.phoneWindowPan = nil;
+    _streamView.phoneWindowControlActive = NO;
+    HttpManager *manager = _phoneWindowHTTP;
+    if (_phoneWindowToken) {
+        [manager phoneWindowRequest:@{@"action":@"end", @"token":_phoneWindowToken,
+            @"seq":@(++_phoneWindowSequence), @"dx":@(_phoneWindowDelta.x), @"dy":@(_phoneWindowDelta.y)}
+            completion:^(NSDictionary *result, NSError *error) { [manager closePhoneWindowSession]; }];
+    } else if (!_phoneWindowBusy) [manager closePhoneWindowSession];
+    // A pending begin owns its cleanup and releases any late token.
+    _phoneWindowHTTP = nil;
+    _phoneWindowToken = nil;
+    _phoneWindowMode = nil;
+    _phoneWindowBusy = NO;
+    [self phoneDragStateDidChange];
+    [self updateTransientHUDText:nil];
+}
+
 - (void)phoneDragStateDidChange {
     BOOL locked = _streamView.phoneDragLocked;
     BOOL holding = _streamView.phoneDragHolding;
-    BOOL resizing = _streamView.phoneWindowResize;
+    BOOL resizing = _phoneWindowMode != nil;
     NSInteger state = (holding ? 2 : locked ? 1 : 0) + (resizing ? 3 : 0);
     if (!_phoneDragButton || _phoneDragUIState == state) return;
     _phoneDragUIState = state;
     NSString *title = resizing ? @"Done" : holding ? @"Drop" : locked ? @"Pick" : @"Drag";
-    _phoneDragButton.selected = locked;
+    _phoneDragButton.selected = locked || resizing;
     [_phoneDragButton setTitle:title forState:UIControlStateNormal];
-    _phoneDragButton.accessibilityLabel = holding ? @"Drop held item" : locked ? @"Cancel drag selection" : @"Drag an item";
+    _phoneDragButton.accessibilityLabel = resizing ? @"Finish adjusting window" : holding ? @"Drop held item" : locked ? @"Cancel drag selection" : @"Drag an item";
     if (@available(iOS 15.0, *)) {
         UIButtonConfiguration *config = [_phoneDragButton.configuration copy];
         config.title = title;
-        config.baseForegroundColor = locked ? UIColor.systemYellowColor : UIColor.systemBlueColor;
-        config.image = [UIImage systemImageNamed:resizing ? @"arrow.up.left.and.arrow.down.right" : holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
+        config.baseForegroundColor = (locked || resizing) ? UIColor.systemYellowColor : UIColor.systemBlueColor;
+        config.image = [UIImage systemImageNamed:resizing ? ([_phoneWindowMode isEqualToString:@"move"] ? @"arrow.up.and.down.and.arrow.left.and.right" : @"arrow.up.left.and.arrow.down.right") : holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
         _phoneDragButton.configuration = config;
     }
 }
 
 - (void)releasePhoneDrag {
+    [self endPhoneWindowTool];
     [_streamView configurePhoneDragLock:NO];
     [self phoneDragStateDidChange];
 }
@@ -1278,7 +1382,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 - (void)phoneControlPressed:(UIButton *)button {
     [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
     // Keep the mouse held while switching to a destination app during a drag.
-    if (button.tag == 3 || button.tag == 5 || (_streamView.phoneWindowResize && button.tag != 4)) [self releasePhoneDrag];
+    if (button.tag == 3 || button.tag == 5 || (_phoneWindowMode && button.tag != 4)) [self releasePhoneDrag];
     switch (button.tag) {
         case 1:
             [self sendPhoneCommand:_streamView.phoneDragLocked ? @"WIN+TAB" : @"WIN+ALT+CTRL+A"];
@@ -1300,6 +1404,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         }
         case 3: [_streamView toggleSoftKeyboardFromButton]; break;
         case 4: {
+            if (_phoneWindowMode) { [self endPhoneWindowTool]; break; }
             BOOL enable = !_streamView.phoneDragLocked;
             [_streamView configurePhoneDragLock:enable];
             [self phoneDragStateDidChange];
@@ -1308,9 +1413,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         }
         case 5: {
             UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Your desktop"
-                message:@"Choose more room for desktop apps, or larger text. Changes apply immediately."
+                message:@"Move or resize the selected window with your finger. Choose a layout for more room or larger text."
                 preferredStyle:UIAlertControllerStyleActionSheet];
-            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Resize window", @"Disconnect"];
+            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Launch an app", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Move window", @"Resize window", @"Disconnect"];
             NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+G", @"WIN+ALT+SPACE"];
             __weak StreamFrameViewController *weakSelf = self;
             for (NSInteger i = 0; i < titles.count; i++) {
@@ -1326,10 +1431,8 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                     } else if (i == 6) {
                         [vc resetMagnifierStreamViewWithAnimated:YES];
                     } else if (i == 7) [vc expandSettingsView];
-                    else if (i == 8) {
-                        [vc sendPhoneCommand:@"WIN+ALT+CTRL+SHIFT+E"];
-                        [vc->_streamView configurePhoneWindowResize];
-                        [vc updateTransientHUDText:@"Touch inside the window and drag to resize. Tap Done when finished."];
+                    else if (i == 8 || i == 9) {
+                        [vc beginPhoneWindowTool:i == 8 ? @"move" : @"resize"];
                     } else [vc returnToMainFrame];
                 }]];
             }
@@ -2053,6 +2156,10 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 // This fires when the home button is pressed
 - (void)applicationDidEnterBackground:(UIApplication *)application {
+#if !TARGET_OS_TV
+    [self releasePhoneDrag];
+#endif
+
     [Connection resetSysAudioPlaybackCooldown];
     // NSLog(@"did enter background, %d, %@, %d", _settings.enablePIP, self.pipController, self.pipController.isPictureInPictureActive);
     

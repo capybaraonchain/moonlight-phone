@@ -84,6 +84,7 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
 #if !TARGET_OS_TV
     AbsoluteTouchHandler* phoneDragHandler;
     BOOL phoneDesktopInput;
+    UITouch *phoneWindowFinger;
     NSMutableDictionary<NSValue *, NSNumber *> *phoneTouchIDs;
     AbsoluteTouchHandler *phoneTouchFallback;
 #endif
@@ -1373,6 +1374,12 @@ static CGFloat previousRollAngle = 0;
 #endif
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    // Window manipulation never emits a remote mouse or native touch event.
+    if (self.phoneWindowControlActive) {
+        if (!phoneWindowFinger) phoneWindowFinger = touches.anyObject;
+        return;
+    }
+
 #if TARGET_OS_TV
     return;
 #else
@@ -1554,6 +1561,16 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+    // Window manipulation never emits a remote mouse or native touch event.
+    if (self.phoneWindowControlActive) {
+        if (phoneWindowFinger && [touches containsObject:phoneWindowFinger]) {
+            CGPoint point = [phoneWindowFinger locationInView:self];
+            CGPoint last = [phoneWindowFinger previousLocationInView:self];
+            if (self.phoneWindowPan) self.phoneWindowPan(CGPointMake(point.x - last.x, point.y - last.y));
+        }
+        return;
+    }
+
 #if !TARGET_OS_TV
     if (phoneDragHandler.phoneDragLocked && ((UITouch *)touches.anyObject).type == UITouchTypeDirect) {
         hasUserInteracted = YES;
@@ -1729,6 +1746,17 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
+    // Window manipulation never emits a remote mouse or native touch event.
+    if (self.phoneWindowControlActive) {
+        if (phoneWindowFinger && [touches containsObject:phoneWindowFinger]) {
+            CGPoint point = [phoneWindowFinger locationInView:self];
+            CGPoint last = [phoneWindowFinger previousLocationInView:self];
+            if (self.phoneWindowPan) self.phoneWindowPan(CGPointMake(point.x - last.x, point.y - last.y));
+            phoneWindowFinger = nil;
+        }
+        return;
+    }
+
 #if TARGET_OS_TV
     return;
 #else
@@ -1784,6 +1812,12 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
+    // Window manipulation never emits a remote mouse or native touch event.
+    if (self.phoneWindowControlActive) {
+        phoneWindowFinger = nil;
+        return;
+    }
+
 #if !TARGET_OS_TV
     if (phoneTouchIDs.count) { [self cancelPhoneTouches]; return; }
     if (phoneDragHandler.phoneDragLocked) [phoneDragHandler touchesCancelled:touches withEvent:event];
@@ -2185,6 +2219,12 @@ static CGFloat previousRollAngle = 0;
     if (phoneTouchIDs.count) LiSendTouchEvent(LI_TOUCH_EVENT_CANCEL_ALL, 0, 0, 0, 0, 0, 0, 0);
     [phoneTouchIDs removeAllObjects];
 #endif
+}
+
+- (void)setPhoneWindowControlActive:(BOOL)active {
+    _phoneWindowControlActive = active;
+    phoneWindowFinger = nil;
+    [self cancelPhoneTouches];
 }
 
 - (BOOL)phoneWindowResize {

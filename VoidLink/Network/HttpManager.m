@@ -33,6 +33,7 @@
     NSString* _baseHTTPSURL;
     NSMutableSet<NSURLSessionTask *> *_requestTasks;
     BOOL _requestsCancelled;
+    NSURLSession *_phoneWindowSession;
 }
 
 + (NSData*) fixXmlVersion:(NSData*) xmlData {
@@ -105,6 +106,35 @@
     }
     
     return YES;
+}
+
+- (void)phoneWindowRequest:(NSDictionary *)body completion:(void (^)(NSDictionary *, NSError *))completion {
+    if (!_phoneWindowSession) {
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+        config.timeoutIntervalForRequest = 3;
+        config.timeoutIntervalForResource = 4;
+        config.HTTPMaximumConnectionsPerHost = 1;
+        _phoneWindowSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
+        [NSURL URLWithString:[NSString stringWithFormat:@"https://%@:47992/phone/window", _urlSafeHostName]]];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    [[_phoneWindowSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSDictionary *result = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if (![result isKindOfClass:NSDictionary.class]) result = nil;
+        if (!error && ![result[@"ok"] boolValue]) {
+            error = [NSError errorWithDomain:@"PhoneWindow" code:1 userInfo:@{NSLocalizedDescriptionKey:
+                result[@"error"] ?: @"Window controls are unavailable. Check the host service."}];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(result, error); });
+    }] resume];
+}
+
+- (void)closePhoneWindowSession {
+    [_phoneWindowSession finishTasksAndInvalidate];
+    _phoneWindowSession = nil;
 }
 
 - (void)cancelRequests {
