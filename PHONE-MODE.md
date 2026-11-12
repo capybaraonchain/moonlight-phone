@@ -62,3 +62,16 @@ including sizes larger than the screen and partially offscreen positions.
 Applications that insist on a minimum size remain anchored; the phone explains
 the limit instead of silently sending ineffective mouse input. Use Roomy layout
 for applications that need more desktop space.
+
+### Open Omarchy from Home Screen or Control Center
+
+The **Open Omarchy** App Shortcut has no parameters. It connects directly to the
+paired PC named `omarchy`, or to the sole paired desktop when there is only one.
+An existing stream is brought forward without restarting it. Open the PC once
+in Moonlight Phone after pairing so its Desktop entry is cached. Desktop targets
+also appear automatically in the generic Open VoidLink Target action.
+
+In Shortcuts, create a shortcut named **Omarchy** containing **Open Omarchy**
+from Moonlight Phone. Add it to Home Screen, select it in a Shortcuts widget,
+or add a Shortcut control in Control Center and choose Omarchy. This uses
+Apple's built-in widgets and controls and needs no additional signed extension.

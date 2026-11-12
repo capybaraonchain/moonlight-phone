@@ -456,6 +456,9 @@ final class DeeplinkCoordinator: NSObject {
                 return updated
             }
         }
+        if #available(iOS 16.0, *) {
+            VoidLinkAppShortcuts.updateAppShortcutParameters()
+        }
     }
 
     @MainActor private static let shortcutCoordinators = NSHashTable<DeeplinkCoordinator>.weakObjects()
@@ -467,6 +470,18 @@ final class DeeplinkCoordinator: NSObject {
         }
         pendingShortcutURL = url
         deliverPendingShortcut()
+    }
+
+    @MainActor @nonobjc fileprivate static func openOmarchyShortcut() throws {
+        // Bringing an existing stream forward must never tear it down.
+        if shortcutCoordinators.allObjects.contains(where: { $0.mainFrame?.isStreaming() == true }) { return }
+        let desktops = ShortcutCatalog.availableEntries.filter { $0.appName?.caseInsensitiveCompare("Desktop") == .orderedSame }
+        let named = desktops.filter { $0.hostName.caseInsensitiveCompare("omarchy") == .orderedSame }
+        let matches = named.isEmpty ? desktops : named
+        guard matches.count == 1, let entry = matches.first else {
+            throw OmarchyShortcutUnavailable()
+        }
+        try openShortcut(entry)
     }
 
     @MainActor static func deliverPendingShortcut() {
@@ -533,6 +548,22 @@ private enum ShortcutCatalog {
         return (try? JSONDecoder().decode([Entry].self, from: data)) ?? []
     }
 
+    // Saved paired desktops are usable immediately, without a separate
+    // "Add to Shortcuts" step in a context menu. Custom targets remain intact.
+    static var availableEntries: [Entry] {
+        var result = entries
+        for host in DataManager().getHosts() where host.serverCert != nil {
+            for app in (host.appList as? Set<TemporaryApp> ?? []) {
+                guard let id = app.id, app.name?.caseInsensitiveCompare("Desktop") == .orderedSame else { continue }
+                let hostID = host.uuid.lowercased()
+                guard !result.contains(where: { $0.hostID == hostID && $0.appID == id }) else { continue }
+                result.append(Entry(id: "desktop:\(hostID):\(id)", hostID: hostID,
+                                    hostName: host.name, appID: id, appName: app.name))
+            }
+        }
+        return result.sorted { ($0.hostName, $0.id) < ($1.hostName, $1.id) }
+    }
+
     static func update(_ edit: (inout [Entry]) -> Void) {
         let previous = entries
         var updated = previous
@@ -547,6 +578,24 @@ private enum ShortcutCatalog {
 
 private struct ShortcutTargetUnavailable: LocalizedError {
     var errorDescription: String? { "This VoidLink shortcut target is no longer available.".localized }
+}
+
+private struct OmarchyShortcutUnavailable: LocalizedError {
+    var errorDescription: String? {
+        "Open your paired Omarchy PC once in Moonlight Phone to load Desktop, then try again. If you have several PCs, name the intended PC omarchy."
+    }
+}
+
+@available(iOS 16.0, *)
+struct OpenOmarchyStream: AppIntent {
+    static let title: LocalizedStringResource = "Open Omarchy"
+    static let description = IntentDescription("Connect directly to your paired Omarchy desktop. Add this shortcut to your Home Screen or Control Center.")
+    static var openAppWhenRun: Bool { true }
+
+    @MainActor func perform() async throws -> some IntentResult {
+        try DeeplinkCoordinator.openOmarchyShortcut()
+        return .result()
+    }
 }
 
 @available(iOS 16.0, *)
@@ -575,11 +624,11 @@ struct VoidLinkShortcutTarget: AppEntity {
 @available(iOS 16.0, *)
 struct VoidLinkShortcutTargetQuery: EntityQuery {
     @MainActor func suggestedEntities() async throws -> [VoidLinkShortcutTarget] {
-        ShortcutCatalog.entries.map(VoidLinkShortcutTarget.init)
+        ShortcutCatalog.availableEntries.map(VoidLinkShortcutTarget.init)
     }
 
     @MainActor func entities(for identifiers: [String]) async throws -> [VoidLinkShortcutTarget] {
-        let entries = ShortcutCatalog.entries
+        let entries = ShortcutCatalog.availableEntries
         return identifiers.compactMap { id in
             entries.first { $0.id == id }.map(VoidLinkShortcutTarget.init)
         }
@@ -595,7 +644,7 @@ struct OpenVoidLinkShortcutTarget: OpenIntent {
     var target: VoidLinkShortcutTarget
 
     @MainActor func perform() async throws -> some IntentResult {
-        guard let entry = ShortcutCatalog.entries.first(where: { $0.id == target.id }) else {
+        guard let entry = ShortcutCatalog.availableEntries.first(where: { $0.id == target.id }) else {
             throw ShortcutTargetUnavailable()
         }
         try DeeplinkCoordinator.openShortcut(entry)
@@ -606,6 +655,10 @@ struct OpenVoidLinkShortcutTarget: OpenIntent {
 @available(iOS 16.0, *)
 struct VoidLinkAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        AppShortcut(intent: OpenOmarchyStream(),
+                    phrases: ["Open Omarchy in \(.applicationName)", "Connect to Omarchy with \(.applicationName)"],
+                    shortTitle: "Open Omarchy",
+                    systemImageName: "desktopcomputer")
         AppShortcut(intent: OpenVoidLinkShortcutTarget(),
                     phrases: ["Open \(\.$target) in \(.applicationName)"],
                     shortTitle: "Open VoidLink Target",
