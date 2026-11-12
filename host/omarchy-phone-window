@@ -97,9 +97,11 @@ class Desktop:
     def fit(frame, bounds):
         x,y,w,h = frame
         left,top,right,bottom = bounds
-        w = min(max(160,w),right-left)
-        h = min(max(120,h),bottom-top)
-        return tuple(round(n) for n in (max(left,min(x,right-w)),max(top,min(y,bottom-h)),w,h))
+        # Floating means the frame may be larger than the screen or overlap its
+        # edges. Retain a reachable titlebar, not a forced full-window fit.
+        w = min(max(160,w),max(160,(right-left)*4))
+        h = min(max(120,h),max(120,(bottom-top)*4))
+        return tuple(round(n) for n in (max(left-w+96,min(x,right-96)),max(top,min(y,bottom-32)),w,h))
 
     def settle(self, window, requested, bounds):
         # Toolkit constraints arrive with the next surface commit. Read them back
@@ -110,8 +112,8 @@ class Desktop:
             raise Rejected('The selected window closed or changed desktop')
         w,h = current['size']
         left,top,right,bottom = bounds
-        x = round(max(left,min(requested[0],right-w)))
-        y = round(max(top,min(requested[1],bottom-h)))
+        x = round(max(left-w+96,min(requested[0],right-96)))
+        y = round(max(top,min(requested[1],bottom-32)))
         if current['at'] != [x,y]:
             self.command('eval hl.dispatch(hl.dsp.window.move({window='+json.dumps('address:'+current['address'])+f',x={x},y={y},relative=false}}))')
         return x,y,w,h
@@ -184,10 +186,8 @@ class Desktop:
                 raise Rejected('The selected window is no longer on this desktop')
             x,y,w,h = g['frame']
             frame = (x+dx,y+dy,w,h) if g['mode']=='move' else (x,y,w+dx,h+dy)
-            # Resize anchors the top-left instead of shoving the window sideways.
+            # Keep the top-left stable while allowing sizes beyond the work area.
             bounds = self.bounds(monitor)
-            if g['mode']=='resize':
-                frame = (x,y,min(w+dx,bounds[2]-x),min(h+dy,bounds[3]-y))
             frame = self.fit(frame,bounds)
             self.apply(window,frame)
             requested = frame

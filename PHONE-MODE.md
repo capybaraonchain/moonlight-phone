@@ -48,7 +48,8 @@ phone-session resolution/nonce. The existing display-handoff lock excludes
 rotation conflicts; special Agent Desktop windows are excluded. It never changes
 outputs, restarts apps or invokes a shell with client input.
 
-The host preserves title-bar clearance and clamps movement to the usable area.
+The host keeps a reachable title-bar grip while allowing freely positioned windows,
+including sizes larger than the screen and partially offscreen positions.
 Applications that insist on a minimum size remain anchored; the phone explains
 the limit instead of silently sending ineffective mouse input. Use Roomy layout
 for applications that need more desktop space.
