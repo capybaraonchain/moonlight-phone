@@ -81,6 +81,9 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
     TouchMode touchMode;
     UIResponder* touchHandler;
     UIResponder* sessionTouchHandler;
+#if !TARGET_OS_TV
+    AbsoluteTouchHandler* phoneDragHandler;
+#endif
 
     NSTimer* interactionTimer;
     BOOL hasUserInteracted;
@@ -289,6 +292,7 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
 }
 
 - (void)updateTouchHandlerWithProfile:(OSCProfile* )profile{
+    [self configurePhoneDragLock:NO];
 #if TARGET_OS_TV
     touchMode = TouchModeDisabled;
     self->touchHandler = nil;
@@ -1365,6 +1369,12 @@ static CGFloat previousRollAngle = 0;
 #if TARGET_OS_TV
     return;
 #else
+    if (phoneDragHandler.phoneDragLocked && ((UITouch *)touches.anyObject).type == UITouchTypeDirect) {
+        [self startInteractionTimer];
+        [phoneDragHandler touchesBegan:touches withEvent:event];
+        return;
+    }
+
     // if (@available(iOS 13.4, *)) {
     // cancel restriction of native touch for iOS13.3 & lower
     if (touchMode == TouchModeNativeOnly) {
@@ -1537,6 +1547,12 @@ static CGFloat previousRollAngle = 0;
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
 #if !TARGET_OS_TV
+    if (phoneDragHandler.phoneDragLocked && ((UITouch *)touches.anyObject).type == UITouchTypeDirect) {
+        hasUserInteracted = YES;
+        [phoneDragHandler touchesMoved:touches withEvent:event];
+        return;
+    }
+
     
     if (touchMode == TouchModeNativeOnly) {
         [touchHandler touchesMoved:touches withEvent:event];
@@ -1707,6 +1723,11 @@ static CGFloat previousRollAngle = 0;
 #if TARGET_OS_TV
     return;
 #else
+    if (phoneDragHandler.phoneDragLocked && ((UITouch *)touches.anyObject).type == UITouchTypeDirect) {
+        [phoneDragHandler touchesEnded:touches withEvent:event];
+        return;
+    }
+
 
     if (touchMode == TouchModeNativeOnly) {
         [touchHandler touchesEnded:touches withEvent:event];
@@ -1753,6 +1774,9 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event {
+#if !TARGET_OS_TV
+    if (phoneDragHandler.phoneDragLocked) [phoneDragHandler touchesCancelled:touches withEvent:event];
+#endif
     [touchHandler touchesCancelled:touches withEvent:event];
 #if !TARGET_OS_TV
     if (touchMode == TouchModeNativeOnly) return; //This is a native touch oriented fork, in pure native touch mode, this call back method deals with native touch only.
@@ -2149,8 +2173,21 @@ static CGFloat previousRollAngle = 0;
 #if TARGET_OS_TV
     return NO;
 #else
-    return [touchHandler isKindOfClass:[AbsoluteTouchHandler class]] &&
-        [(AbsoluteTouchHandler *)touchHandler phoneDragLocked];
+    return phoneDragHandler.phoneDragLocked;
+#endif
+}
+
+- (BOOL)phoneDragHolding {
+#if TARGET_OS_TV
+    return NO;
+#else
+    return phoneDragHandler.phoneDragHolding;
+#endif
+}
+
+- (void)phoneDragStateDidChange {
+#if !TARGET_OS_TV
+    [_streamFrameVC phoneDragStateDidChange];
 #endif
 }
 
@@ -2158,8 +2195,13 @@ static CGFloat previousRollAngle = 0;
 #if TARGET_OS_TV
     return NO;
 #else
-    if (![touchHandler isKindOfClass:[AbsoluteTouchHandler class]]) return NO;
-    [(AbsoluteTouchHandler *)touchHandler setPhoneDragLocked:locked];
+    if (locked) {
+        if ([sessionTouchHandler isKindOfClass:[RelativeTouchHandler class]])
+            [(RelativeTouchHandler *)sessionTouchHandler reset];
+        [_streamFrameVC setMagnifierViewportInteractionEnabled:NO];
+        if (!phoneDragHandler) phoneDragHandler = [[AbsoluteTouchHandler alloc] initWithView:self andSettings:settings];
+    }
+    phoneDragHandler.phoneDragLocked = locked;
     return YES;
 #endif
 }
@@ -2186,6 +2228,7 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (void)toggleTouchDisabled:(bool)disabled{
+    if (disabled) [self configurePhoneDragLock:NO];
     if (disabled && [sessionTouchHandler isKindOfClass:[RelativeTouchHandler class]]) {
         [(RelativeTouchHandler*)sessionTouchHandler reset];
     }

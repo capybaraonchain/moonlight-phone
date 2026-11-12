@@ -80,5 +80,6 @@
 - (void)remoteTextInputForTvOS;
 - (void)updateOverlayText:(NSString*)text;
 - (void)updateTransientHUDText:(NSString*)text;
+- (void)phoneDragStateDidChange;
 
 @end

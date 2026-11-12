@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface AbsoluteTouchHandler : UIResponder
 @property (nonatomic, assign) BOOL phoneDragLocked;
+@property (nonatomic, readonly) BOOL phoneDragHolding;
 @property (class, nonatomic, assign) int mouseButtonForCursorMove;
 
 - (id)initWithView:(StreamView*)view andSettings:(TemporarySettings*)settings;

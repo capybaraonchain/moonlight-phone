@@ -10,6 +10,7 @@
 //
 
 #import "AbsoluteTouchHandler.h"
+#import "PhoneDragState.h"
 #import "VoidLink-Swift.h"
 
 #include <Limelight.h>
@@ -58,6 +59,7 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
     bool _delayMouseLeftClick;
     NSTimeInterval leftClickDelay;
     
+    PhoneDragState phoneDragState;
     bool dragButtonDown;
     UInt8 currentTouchesCount;
     
@@ -90,7 +92,7 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 }
 
 - (void)onLongPressStart:(NSTimer*)timer {
-    if (_phoneDragLocked) return;
+    if (phoneDragState.enabled) return;
     // Raise the left click and start a right click
     if(multiTouchesDetected) return;
     
@@ -110,6 +112,20 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
     rightButtonClicked = false;
+    if (phoneDragState.enabled) {
+        // Drag is a temporary direct-touch operation in every input mode.
+        // One press picks up; subsequent finger lifts/repositions keep it held.
+        if (capturedTouch) return;
+        for (UITouch *touch in touches) {
+            if (touch.type == UITouchTypeDirect) { capturedTouch = touch; break; }
+        }
+        if (!capturedTouch) return;
+        unsigned action = PhoneDragBegin(&phoneDragState);
+        if (action & PhoneDragMove) [streamView updateCursorLocation:[capturedTouch locationInView:streamView] isMouse:NO];
+        if (action & PhoneDragPress) LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+        [streamView phoneDragStateDidChange];
+        return;
+    }
 
     if([UITouchUtil touchesIn:streamView from:event].count>=2){
         multiTouchesDetected = true;
@@ -148,9 +164,8 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
     }
     
     // Press the left button down
-    if(_phoneDragLocked || !_delayMouseLeftClick){
+    if(!_delayMouseLeftClick){
         LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT); //deprecated
-        if (_phoneDragLocked) dragButtonDown = true;
     }
     
     // Start the long press timer
@@ -178,6 +193,11 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 }
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event {
+    if (phoneDragState.enabled) {
+        if (capturedTouch && [touches containsObject:capturedTouch])
+            [streamView updateCursorLocation:[capturedTouch locationInView:streamView] isMouse:NO];
+        return;
+    }
     
     if(touchPointSpawnedAtUpperScreenEdge) return; // we're done here. this touch event will not be sent to the remote PC.
     
@@ -219,6 +239,10 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 }
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event {
+    if (phoneDragState.enabled) {
+        if ([touches containsObject:capturedTouch]) capturedTouch = nil;
+        return; // Drop, cancellation or disconnect releases the held button.
+    }
     [longPressTimer invalidate];
     longPressTimer = nil;
     
@@ -241,13 +265,6 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
         
         // Remember this last touch for touch-down deadzoning
         CGPoint touchEndLocation = [capturedTouch locationInView:streamView];
-        if (_phoneDragLocked) {
-            // Lifting a finger permits repositioning; Drop releases the button.
-            lastTouchUp = [touches anyObject];
-            lastTouchUpLocation = touchEndLocation;
-            return;
-        }
-        
         if(_delayMouseLeftClick){
             if(CACurrentMediaTime()-touchBeganTimeStamp<leftClickTimeThreshold) {
                 if(CACurrentMediaTime()-lastTouchUp.timestamp<0.15
@@ -286,19 +303,23 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
     [self touchesEnded:touches withEvent:event];
 }
 
+- (BOOL)phoneDragLocked { return phoneDragState.enabled; }
+- (BOOL)phoneDragHolding { return phoneDragState.holding; }
+
 - (void)setPhoneDragLocked:(BOOL)locked {
-    if (_phoneDragLocked == locked) return;
-    _phoneDragLocked = locked;
+    unsigned action = PhoneDragSetEnabled(&phoneDragState, locked);
     [longPressTimer invalidate];
     longPressTimer = nil;
-    if (!locked) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-        dragButtonDown = false;
-    }
+    capturedTouch = nil;
+    multiTouchesDetected = false;
+    touchPointSpawnedAtUpperScreenEdge = false;
+    if (action & PhoneDragRelease) LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+    if (!locked) dragButtonDown = false;
+    [streamView phoneDragStateDidChange];
 }
 
 - (void)dealloc {
-    if (_phoneDragLocked) LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+    if (phoneDragState.holding) LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
 }
 
 - (void)sendShortMouseLeftButtonClickEvent{

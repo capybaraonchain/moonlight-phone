@@ -100,6 +100,8 @@ NS_INLINE StreamInputGeometry StreamInputGeometryMake(CGRect bounds, CGFloat asp
 
 - (void)alterAbsTouchDragWith:(int32_t)mouseButton;
 @property (nonatomic, readonly) BOOL phoneDragLocked;
+@property (nonatomic, readonly) BOOL phoneDragHolding;
+- (void)phoneDragStateDidChange;
 - (BOOL)configurePhoneDragLock:(BOOL)locked;
 
 - (void)enablePencilHover;

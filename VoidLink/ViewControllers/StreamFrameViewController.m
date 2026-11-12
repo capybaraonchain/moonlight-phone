@@ -115,12 +115,14 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     NSTimer *_statsUpdateTimer;
     PaddedLabel *_overlayView;
     PaddedLabel *_transientHUDView;
+    NSUInteger _transientHUDGeneration;
     ToolboxViewController* toolBoxViewController;
 #if !TARGET_OS_TV
     FloatingKeyboardButton* _floatingKeyboardButton;
     UIVisualEffectView *_phoneToolbar;
     UIStackView *_phoneToolbarStack;
     UIButton *_phoneDragButton;
+    NSInteger _phoneDragUIState;
     BOOL _phoneToolbarCollapsed;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
@@ -811,6 +813,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self updateTransientHUDText:nil];
 #if !TARGET_OS_TV
     [self releasePhoneDrag];
 #endif
@@ -1231,16 +1234,33 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     [_floatingKeyboardButton restorePosition];
     if (_phoneToolbar) {
         _floatingKeyboardButton.hidden = YES;
-        _phoneDragButton.selected = _streamView.phoneDragLocked;
-        [_phoneDragButton setTitle:_streamView.phoneDragLocked ? @"Drop" : @"Drag" forState:UIControlStateNormal];
+        [self phoneDragStateDidChange];
         [self.view bringSubviewToFront:_phoneToolbar];
+    }
+}
+
+- (void)phoneDragStateDidChange {
+    BOOL locked = _streamView.phoneDragLocked;
+    BOOL holding = _streamView.phoneDragHolding;
+    NSInteger state = holding ? 2 : locked ? 1 : 0;
+    if (!_phoneDragButton || _phoneDragUIState == state) return;
+    _phoneDragUIState = state;
+    NSString *title = holding ? @"Drop" : locked ? @"Pick" : @"Drag";
+    _phoneDragButton.selected = locked;
+    [_phoneDragButton setTitle:title forState:UIControlStateNormal];
+    _phoneDragButton.accessibilityLabel = holding ? @"Drop held item" : locked ? @"Cancel drag selection" : @"Drag an item";
+    if (@available(iOS 15.0, *)) {
+        UIButtonConfiguration *config = [_phoneDragButton.configuration copy];
+        config.title = title;
+        config.baseForegroundColor = locked ? UIColor.systemYellowColor : UIColor.systemBlueColor;
+        config.image = [UIImage systemImageNamed:holding ? @"hand.draw.fill" : locked ? @"hand.point.up.left.fill" : @"hand.draw"];
+        _phoneDragButton.configuration = config;
     }
 }
 
 - (void)releasePhoneDrag {
     [_streamView configurePhoneDragLock:NO];
-    _phoneDragButton.selected = NO;
-    [_phoneDragButton setTitle:@"Drag" forState:UIControlStateNormal];
+    [self phoneDragStateDidChange];
 }
 
 - (void)sendPhoneCommand:(NSString *)command {
@@ -1274,13 +1294,10 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         }
         case 3: [_streamView toggleSoftKeyboardFromButton]; break;
         case 4: {
-            BOOL enable = !button.selected;
-            if ([_streamView configurePhoneDragLock:enable]) {
-                button.selected = enable;
-                [button setTitle:enable ? @"Drop" : @"Drag" forState:UIControlStateNormal];
-            } else {
-                [self updateTransientHUDText:@"Drag lock uses Absolute Touch mode"];
-            }
+            BOOL enable = !_streamView.phoneDragLocked;
+            [_streamView configurePhoneDragLock:enable];
+            [self phoneDragStateDidChange];
+            [self updateTransientHUDText:enable ? @"Touch an item and move it. Lift to reposition; tap Drop to release." : nil];
             break;
         }
         case 5: {
@@ -1325,6 +1342,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 - (void)installPhoneToolbar {
     if (!PublicUtils.isIPhone || _phoneToolbar) return;
+    _phoneDragUIState = -1;
     _phoneToolbar = [[UIVisualEffectView alloc] initWithEffect:
         [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterialDark]];
     _phoneToolbar.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1715,6 +1733,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         return;
     }
 
+    NSUInteger generation = ++_transientHUDGeneration;
     if (text == nil) {
         _transientHUDView.hidden = YES;
         return;
@@ -1728,25 +1747,41 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         _transientHUDView.textAlignment = NSTextAlignmentLeft;
         _transientHUDView.textColor = [UIColor.whiteColor colorWithAlphaComponent:0.7];
         _transientHUDView.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.5];
-        _transientHUDView.font = [UIFont systemFontOfSize: PublicUtils.isIPhone ? 18 : (PublicUtils.isTVOS ? 32 : 22)
+        _transientHUDView.font = [UIFont systemFontOfSize: PublicUtils.isIPhone ? 13 : (PublicUtils.isTVOS ? 32 : 22)
                                                   weight:UIFontWeightSemibold];
         _transientHUDView.layer.cornerRadius = 8;
         _transientHUDView.layer.masksToBounds = YES;
-        _transientHUDView.userInteractionEnabled = NO;
+        _transientHUDView.userInteractionEnabled = YES;
+        [_transientHUDView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissTransientHUD)]];
 
         [self.view addSubview:_transientHUDView];
         UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
         [NSLayoutConstraint activateConstraints:@[
-            [_transientHUDView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor constant:35],
-            [_transientHUDView.topAnchor constraintEqualToAnchor:safeArea.topAnchor constant:12],
-            [_transientHUDView.widthAnchor constraintLessThanOrEqualToAnchor:safeArea.widthAnchor multiplier:0.8]
+            [_transientHUDView.centerXAnchor constraintEqualToAnchor:safeArea.centerXAnchor],
+            [_transientHUDView.widthAnchor constraintEqualToAnchor:safeArea.widthAnchor multiplier:0.88]
         ]];
+#if !TARGET_OS_TV
+        if (PublicUtils.isIPhone && _phoneToolbar) {
+            [_transientHUDView.bottomAnchor constraintEqualToAnchor:_phoneToolbar.topAnchor constant:-8].active = YES;
+        } else
+#endif
+        {
+            [_transientHUDView.topAnchor constraintEqualToAnchor:safeArea.topAnchor constant:12].active = YES;
+        }
     }
 
     _transientHUDView.text = text;
     _transientHUDView.hidden = NO;
     [self.view bringSubviewToFront:_transientHUDView];
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((PublicUtils.isIPhone ? 3.5 : 5.0) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        typeof(self) strongSelf = weakSelf;
+        if (strongSelf && strongSelf->_transientHUDGeneration == generation)
+            [strongSelf updateTransientHUDText:nil];
+    });
 }
+
+- (void)dismissTransientHUD { [self updateTransientHUDText:nil]; }
 
 - (void)returnToMainFrame {
 #if !TARGET_OS_TV
@@ -1873,6 +1908,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 // This will fire if the user opens control center or gets a low battery message
 - (void)applicationWillResignActive:(NSNotification *)notification {
+    [self updateTransientHUDText:nil];
 #if !TARGET_OS_TV
     [self releasePhoneDrag];
 #endif
