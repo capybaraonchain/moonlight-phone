@@ -123,8 +123,7 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
         unsigned action = PhoneDragBegin(&phoneDragState);
         if (action & PhoneDragMove) [streamView updateCursorLocation:[capturedTouch locationInView:streamView] isMouse:NO];
         if (action & PhoneDragPress) {
-            if (self.phoneWindowResize) LiSendKeyboardEvent(0x5B, KEY_ACTION_DOWN, MODIFIER_META);
-            LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, self.phoneWindowResize ? BUTTON_RIGHT : BUTTON_LEFT);
+            LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
         }
         [streamView phoneDragStateDidChange];
         return;
@@ -317,8 +316,7 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
     multiTouchesDetected = false;
     touchPointSpawnedAtUpperScreenEdge = false;
     if (action & PhoneDragRelease) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, self.phoneWindowResize ? BUTTON_RIGHT : BUTTON_LEFT);
-        if (self.phoneWindowResize) LiSendKeyboardEvent(0x5B, KEY_ACTION_UP, 0);
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
     }
     if (!locked) dragButtonDown = false;
     [streamView phoneDragStateDidChange];
@@ -326,8 +324,7 @@ static int mouseButtonForCursorMove = BUTTON_LEFT;
 
 - (void)dealloc {
     if (phoneDragState.holding) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, self.phoneWindowResize ? BUTTON_RIGHT : BUTTON_LEFT);
-        if (self.phoneWindowResize) LiSendKeyboardEvent(0x5B, KEY_ACTION_UP, 0);
+        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
     }
 }
 

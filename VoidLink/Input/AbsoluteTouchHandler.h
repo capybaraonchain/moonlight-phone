@@ -19,7 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (id)initWithView:(StreamView*)view andSettings:(TemporarySettings*)settings;
 - (void)pauseLeftButtonDrag;
 
-@property (nonatomic) BOOL phoneWindowResize;
 @end
 
 NS_ASSUME_NONNULL_END

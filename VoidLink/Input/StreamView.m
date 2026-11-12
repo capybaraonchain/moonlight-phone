@@ -2227,23 +2227,6 @@ static CGFloat previousRollAngle = 0;
     [self cancelPhoneTouches];
 }
 
-- (BOOL)phoneWindowResize {
-#if TARGET_OS_TV
-    return NO;
-#else
-    return phoneDragHandler.phoneWindowResize && phoneDragHandler.phoneDragLocked;
-#endif
-}
-
-- (void)configurePhoneWindowResize {
-#if !TARGET_OS_TV
-    [self configurePhoneDragLock:NO];
-    [self configurePhoneDragLock:YES];
-    phoneDragHandler.phoneWindowResize = YES;
-    [self phoneDragStateDidChange];
-#endif
-}
-
 #if !TARGET_OS_TV
 - (BOOL)sendPhoneTouches:(NSSet<UITouch *> *)touches event:(UIEvent *)event type:(uint8_t)type {
     if (!phoneDesktopInput || (touchMode != TouchModeNative && touchMode != TouchModeNativeOnly) ||
@@ -2317,7 +2300,6 @@ static CGFloat previousRollAngle = 0;
         [_streamFrameVC setMagnifierViewportInteractionEnabled:NO];
         if (!phoneDragHandler) phoneDragHandler = [[AbsoluteTouchHandler alloc] initWithView:self andSettings:settings];
     }
-    if (locked) phoneDragHandler.phoneWindowResize = NO;
     phoneDragHandler.phoneDragLocked = locked;
     return YES;
 #endif

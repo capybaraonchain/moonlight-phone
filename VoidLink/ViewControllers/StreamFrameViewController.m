@@ -136,7 +136,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     CGPoint _phoneWindowDelta, _phoneWindowSent;
     CGSize _phoneWindowDesktopSize;
     NSUInteger _phoneWindowSequence, _phoneWindowGeneration;
-    BOOL _phoneWindowBusy;
+    BOOL _phoneWindowBusy, _phoneWindowLimitShown;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
     uint16_t overlayLevel;
@@ -1259,6 +1259,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     _phoneWindowDelta = CGPointZero;
     _phoneWindowSent = CGPointZero;
     _phoneWindowSequence = 0;
+    _phoneWindowLimitShown = NO;
+    _magnifierViewportInteractionActive = NO;
+    [self updateScrollViewInteractionState];
     _phoneWindowBusy = YES;
     _streamView.phoneWindowControlActive = YES;
     NSUInteger generation = ++_phoneWindowGeneration;
@@ -1322,6 +1325,10 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                 self->_phoneWindowDelta.x += actual.x - self->_phoneWindowSent.x;
                 self->_phoneWindowDelta.y += actual.y - self->_phoneWindowSent.y;
                 self->_phoneWindowSent = actual;
+                if ([result[@"limited"] boolValue] && !self->_phoneWindowLimitShown) {
+                    self->_phoneWindowLimitShown = YES;
+                    [self updateTransientHUDText:@"This app has reached its minimum size. Roomy layout gives it more space."];
+                }
             }
         }];
 }
