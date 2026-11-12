@@ -25,6 +25,7 @@
 #if !TARGET_OS_TV
 #import "CustomEdgeSlideGestureRecognizer.h"
 #import "CustomTapGestureRecognizer.h"
+#import "../Input/PhoneToolbarReveal.h"
 #endif
 #import "LocalizationHelper.h"
 #import "VoidLink-Swift.h"
@@ -125,7 +126,11 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     UIButton *_phoneDragButton;
     UIButton *_phoneResizeButton;
     NSInteger _phoneDragUIState;
-    BOOL _phoneToolbarCollapsed;
+    PhoneToolbarReveal _phoneToolbarReveal;
+    UIButton *_phoneRevealZone, *_phoneRevealButton;
+    UIPanGestureRecognizer *_phoneRevealPan;
+    CFTimeInterval _phoneRevealBegan;
+    NSUInteger _phoneRevealGeneration;
     BOOL _phoneStreamReady;
     BOOL _phoneReconnecting;
     BOOL _phoneClosing;
@@ -406,6 +411,10 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     _slideToToolboxRecognizer.delaysTouchesBegan = NO;
     _slideToToolboxRecognizer.delaysTouchesEnded = NO;
     [self.view addGestureRecognizer:_slideToToolboxRecognizer];
+    if (_phoneRevealPan) {
+        [_slideToSettingsRecognizer requireGestureRecognizerToFail:_phoneRevealPan];
+        [_slideToToolboxRecognizer requireGestureRecognizerToFail:_phoneRevealPan];
+    }
     
     /*
     if([self isOnScreenWidgetEnabled]){
@@ -831,6 +840,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     [self updateTransientHUDText:nil];
 #if !TARGET_OS_TV
     [self releasePhoneDrag];
+    [self cancelPhoneToolbarReveal];
 #endif
 }
 
@@ -1251,7 +1261,78 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         _floatingKeyboardButton.hidden = YES;
         [self phoneDragStateDidChange];
         [self.view bringSubviewToFront:_phoneToolbar];
+        [self layoutPhoneToolbarReveal];
     }
+}
+
+- (void)layoutPhoneToolbarReveal {
+    if (!_phoneRevealZone) return;
+    UIEdgeInsets safe = self.view.safeAreaInsets;
+    CGFloat height = MAX(28, safe.bottom + 18);
+    _phoneRevealZone.frame = CGRectMake(safe.left, CGRectGetHeight(self.view.bounds) - height,
+        CGRectGetWidth(self.view.bounds) - safe.left - safe.right, height);
+    [self.view bringSubviewToFront:_phoneRevealZone];
+    [self.view bringSubviewToFront:_phoneRevealButton];
+}
+
+- (void)updatePhoneToolbarVisibility {
+    _phoneToolbar.hidden = _phoneToolbarReveal.phase != PhoneToolbarVisible;
+    _phoneRevealZone.hidden = _phoneToolbarReveal.phase == PhoneToolbarVisible;
+    _phoneRevealPan.enabled = !_phoneRevealZone.hidden;
+    _phoneRevealButton.hidden = _phoneToolbarReveal.phase != PhoneToolbarPrompt;
+    [self layoutPhoneToolbarReveal];
+}
+
+- (void)cancelPhoneToolbarReveal {
+    ++_phoneRevealGeneration;
+    PhoneToolbarCancelPrompt(&_phoneToolbarReveal);
+    // Cancel any contact that started before interruption/rotation.
+    _phoneRevealPan.enabled = NO;
+    [self updatePhoneToolbarVisibility];
+}
+
+- (void)showPhoneToolbarRevealPrompt {
+    [self updatePhoneToolbarVisibility];
+    [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
+    UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, _phoneRevealButton);
+    NSUInteger generation = ++_phoneRevealGeneration;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        typeof(self) self = weakSelf;
+        if (!self || self->_phoneRevealGeneration != generation) return;
+        PhoneToolbarCancelPrompt(&self->_phoneToolbarReveal);
+        [self updatePhoneToolbarVisibility];
+    });
+}
+
+- (void)phoneToolbarEdgePanned:(UIPanGestureRecognizer *)gesture {
+    if (_phoneClosing || _phoneReconnecting || !_phoneStreamReady) return;
+    if (gesture.state == UIGestureRecognizerStateBegan) _phoneRevealBegan = CACurrentMediaTime();
+    else if (gesture.state == UIGestureRecognizerStateEnded) {
+        CGPoint delta = [gesture translationInView:self.view];
+        CFTimeInterval now = CACurrentMediaTime();
+        if (PhoneToolbarSwipe(&_phoneToolbarReveal, delta.x, delta.y, now - _phoneRevealBegan, now))
+            [self showPhoneToolbarRevealPrompt];
+    } else if (gesture.state == UIGestureRecognizerStateCancelled || gesture.state == UIGestureRecognizerStateFailed) {
+        PhoneToolbarCancelPrompt(&_phoneToolbarReveal);
+        [self updatePhoneToolbarVisibility];
+    }
+}
+
+- (void)phoneToolbarEdgeActivated {
+    // Standard bottom taps are consumed without affecting the remote desktop.
+    // VoiceOver activation offers the same separate confirmation step.
+    if (UIAccessibilityIsVoiceOverRunning() && !_phoneClosing && !_phoneReconnecting && _phoneStreamReady &&
+        PhoneToolbarRequestPrompt(&_phoneToolbarReveal, CACurrentMediaTime())) [self showPhoneToolbarRevealPrompt];
+}
+
+- (void)confirmPhoneToolbarReveal {
+    if (PhoneToolbarConfirm(&_phoneToolbarReveal, CACurrentMediaTime())) {
+        ++_phoneRevealGeneration;
+        [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
+        [self updatePhoneToolbarVisibility];
+        UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, _phoneToolbarStack.arrangedSubviews.firstObject);
+    } else [self updatePhoneToolbarVisibility];
 }
 
 - (void)beginPhoneWindowTool:(NSString *)mode {
@@ -1456,12 +1537,13 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             break;
         }
         case 6:
-            _phoneToolbarCollapsed = !_phoneToolbarCollapsed;
-            for (UIView *control in _phoneToolbarStack.arrangedSubviews) {
-                if (control != button) control.hidden = _phoneToolbarCollapsed;
-            }
-            [button setTitle:_phoneToolbarCollapsed ? @"•••" : @"Hide" forState:UIControlStateNormal];
-            button.accessibilityLabel = _phoneToolbarCollapsed ? @"Show phone controls" : @"Hide phone controls";
+            [self releasePhoneDrag];
+            [_streamView cancelPhoneTouches];
+            [self.view endEditing:YES];
+            ++_phoneRevealGeneration;
+            PhoneToolbarHide(&_phoneToolbarReveal);
+            [self updatePhoneToolbarVisibility];
+            [self updateTransientHUDText:@"Swipe up from the bottom, then tap Show controls."];
             break;
         case 7:
             if (_phoneWindowMode) [self endPhoneWindowTool];
@@ -1603,6 +1685,39 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     } else {
         [_phoneToolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:6].active = YES;
     }
+    // This view owns only the narrow bottom strip while controls are hidden.
+    // It never forwards the reveal swipe to remote touch/mouse input.
+    _phoneRevealZone = [UIButton buttonWithType:UIButtonTypeCustom];
+    _phoneRevealZone.backgroundColor = UIColor.clearColor;
+    _phoneRevealZone.accessibilityLabel = @"Show phone controls";
+    _phoneRevealZone.accessibilityHint = @"Activate, then confirm with Show controls.";
+    [_phoneRevealZone addTarget:self action:@selector(phoneToolbarEdgeActivated) forControlEvents:UIControlEventTouchUpInside];
+    _phoneRevealPan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(phoneToolbarEdgePanned:)];
+    _phoneRevealPan.minimumNumberOfTouches = 1;
+    _phoneRevealPan.maximumNumberOfTouches = 1;
+    _phoneRevealPan.allowedTouchTypes = @[@(UITouchTypeDirect)];
+    [_phoneRevealZone addGestureRecognizer:_phoneRevealPan];
+    [self.view addSubview:_phoneRevealZone];
+    [_slideToSettingsRecognizer requireGestureRecognizerToFail:_phoneRevealPan];
+    [_slideToToolboxRecognizer requireGestureRecognizerToFail:_phoneRevealPan];
+
+    _phoneRevealButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _phoneRevealButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _phoneRevealButton.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.96];
+    _phoneRevealButton.layer.cornerRadius = 22;
+    [_phoneRevealButton setTitle:@"⌃  Show controls" forState:UIControlStateNormal];
+    [_phoneRevealButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    _phoneRevealButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    _phoneRevealButton.accessibilityLabel = @"Show phone controls";
+    [_phoneRevealButton addTarget:self action:@selector(confirmPhoneToolbarReveal) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_phoneRevealButton];
+    [NSLayoutConstraint activateConstraints:@[
+        [_phoneRevealButton.centerXAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.centerXAnchor],
+        [_phoneRevealButton.bottomAnchor constraintEqualToAnchor:_phoneToolbar.bottomAnchor],
+        [_phoneRevealButton.widthAnchor constraintEqualToConstant:172],
+        [_phoneRevealButton.heightAnchor constraintEqualToConstant:44]
+    ]];
+    [self updatePhoneToolbarVisibility];
     _floatingKeyboardButton.hidden = YES;
 }
 
@@ -2119,6 +2234,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     [self updateTransientHUDText:nil];
 #if !TARGET_OS_TV
     [self releasePhoneDrag];
+    [self cancelPhoneToolbarReveal];
 #endif
     //[self.pipController startPictureInPicture];
     //sleep(1);
@@ -2918,6 +3034,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+#if !TARGET_OS_TV
+    [self cancelPhoneToolbarReveal];
+#endif
 
     NSUInteger resizeGeneration = ++_viewResizeGeneration;
     // Keep the video container's current size during UIKit's rotation animation.

@@ -17,6 +17,12 @@ Moonlight-ZWM 9.0.2 release and not an App Store distribution.
 - A collapsible safe-area toolbar provides Apps, Launch, Type, Drag, Resize, More
   and Hide. Apps switches running windows; Launch opens the application grid.
   Keyboard shortcuts are available under More.
+- Hide fully removes the toolbar in both orientations. Start a one-finger swipe
+  in the narrow bottom edge and move upward at least 64 points, then lift and tap
+  **Show controls**. The confirmation expires after four seconds. Short, diagonal,
+  cancelled and multi-finger gestures cannot open the toolbar; the edge contact
+  is consumed locally without touching the remote desktop. Rotation/backgrounding
+  cancels a pending confirmation. VoiceOver offers the same confirmation action.
 - Drag arms a persistent left-button hold: touch the source, move it, lift and
   reposition fingers as needed, then tap Drop. Cancellation, backgrounding and
   leaving the stream release the mouse button.
