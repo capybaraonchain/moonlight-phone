@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+"""Paired phone window geometry, never mouse emulation or output management."""
+import argparse
+from contextlib import contextmanager
+import fcntl
+import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import math
+import os
+from pathlib import Path
+import re
+import secrets
+import socket
+import ssl
+import threading
+import time
+
+class Rejected(Exception):
+    pass
+
+def read(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+
+class Desktop:
+    def __init__(self, root, env=None):
+        self.root = Path(root)
+        self.env = dict(os.environ if env is None else env)
+        self.signature = self.env.get('HYPRLAND_INSTANCE_SIGNATURE', '')
+        if not self.signature:
+            raise RuntimeError('Missing compositor identity')
+        self.path = Path(self.env['XDG_RUNTIME_DIR'])/'hypr'/self.signature/'.socket.sock'
+        if self.path.is_symlink() or self.path.stat().st_uid != os.getuid():
+            raise RuntimeError('Compositor socket ownership mismatch')
+        self.gestures = {}
+        self.mutex = threading.Lock()
+
+    def command(self, text, json_result=False):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(2)
+            sock.connect(str(self.path))
+            sock.sendall((('j/' if json_result else '/') + text).encode())
+            chunks = []
+            size = 0
+            while data := sock.recv(65536):
+                size += len(data)
+                if size > 4*1024*1024:
+                    raise Rejected('Compositor response too large')
+                chunks.append(data)
+        result = b''.join(chunks).decode()
+        if json_result:
+            return json.loads(result)
+        if result.strip() != 'ok':
+            raise Rejected('The window manager could not apply this change')
+
+    @contextmanager
+    def display_lock(self):
+        with (self.root/'mac-mode/lock').open('a') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise Rejected('The display is changing. Try again after rotation.')
+            yield
+
+    def context(self):
+        session = read(self.root/'phone-mode/session.json')
+        if session.get('instance') != self.signature or not session.get('nonce'):
+            raise Rejected('Window controls are available during a phone stream')
+        monitors = self.command('monitors', True)
+        monitor = next((m for m in monitors if m['name'] == 'MAC-MODE' and m.get('mirrorOf', 'none') in ('none','')), None)
+        if not monitor:
+            raise Rejected('The phone desktop is no longer active')
+        stamp = (session['nonce'], session.get('mode'), session.get('scale'), monitor['width'], monitor['height'], monitor['scale'])
+        return stamp, monitor
+
+    @staticmethod
+    def eligible(w):
+        return (w.get('mapped') and not w.get('hidden') and w.get('workspace',{}).get('name') == '1'
+            and w.get('class') != 'capy.agent-native' and not w.get('class','').startswith('capy.agent-')
+            and re.fullmatch(r'0x[0-9a-fA-F]+', w.get('address','')) and w.get('pid',0) > 0)
+
+    def bounds(self, monitor):
+        left, top, right, bottom = monitor.get('reserved', [0,0,0,0])
+        # Hyprland reports the client rectangle: the native frame extends above it.
+        height = self.command('getoption plugin:hyprbars:bar_height', True).get('int',30)
+        margin = max(0,min(int(height),96)) + 2
+        x = monitor['x'] + left + 2
+        y = monitor['y'] + top + margin
+        endx = monitor['x'] + round(monitor['width']/monitor['scale']) - right - 2
+        endy = monitor['y'] + round(monitor['height']/monitor['scale']) - bottom - 2
+        return x,y,max(x+1,endx),max(y+1,endy)
+
+    @staticmethod
+    def fit(frame, bounds):
+        x,y,w,h = frame
+        left,top,right,bottom = bounds
+        w = min(max(160,w),right-left)
+        h = min(max(120,h),bottom-top)
+        return tuple(round(n) for n in (max(left,min(x,right-w)),max(top,min(y,bottom-h)),w,h))
+
+    def settle(self, window, requested, bounds):
+        # Toolkit constraints arrive with the next surface commit. Read them back
+        # so an app refusing a smaller size cannot recenter its titlebar offscreen.
+        time.sleep(.025)
+        current = next((w for w in self.command('clients',True) if w['address']==window['address'] and w['pid']==window['pid']),None)
+        if not current or not self.eligible(current):
+            raise Rejected('The selected window closed or changed desktop')
+        w,h = current['size']
+        left,top,right,bottom = bounds
+        x = round(max(left,min(requested[0],right-w)))
+        y = round(max(top,min(requested[1],bottom-h)))
+        if current['at'] != [x,y]:
+            self.command('eval hl.dispatch(hl.dsp.window.move({window='+json.dumps('address:'+current['address'])+f',x={x},y={y},relative=false}}))')
+        return x,y,w,h
+
+    def apply(self, window, frame):
+        x,y,w,h = frame
+        selector = json.dumps('address:'+window['address'])
+        ops = []
+        if window['size'] != [w,h]:
+            ops.append(f'hl.dispatch(hl.dsp.window.resize({{window={selector},x={w},y={h},relative=false}}))')
+        # Hyprland may center a resize; re-anchor even when the old position matched.
+        if ops or window['at'] != [x,y]:
+            ops.append(f'hl.dispatch(hl.dsp.window.move({{window={selector},x={x},y={y},relative=false}}))')
+        if ops:
+            self.command('eval ' + ';'.join(ops))
+
+    def handle(self, request, peer):
+        if not isinstance(request, dict):
+            raise Rejected('Invalid request')
+        with self.mutex, self.display_lock():
+            now = time.monotonic()
+            self.gestures = {k:g for k,g in self.gestures.items() if g['expires'] > now}
+            action = request.get('action')
+            if action == 'end' and 'seq' not in request:
+                g = self.gestures.get(request.get('token',''))
+                if g and g['peer'] == peer:
+                    self.gestures.pop(request['token'])
+                return {'ok':True}
+            stamp, monitor = self.context()
+            if action == 'begin':
+                mode = request.get('mode')
+                if mode not in ('move','resize'):
+                    raise Rejected('Choose Move or Resize')
+                w = self.command('activewindow',True)
+                if not self.eligible(w):
+                    raise Rejected('Tap a desktop app first, then choose Move or Resize')
+                selector = json.dumps('address:'+w['address'])
+                if w.get('fullscreen'):
+                    self.command('eval hl.dispatch(hl.dsp.window.fullscreen({window='+selector+',mode="maximized",action="unset"}));hl.dispatch(hl.dsp.window.fullscreen({window='+selector+',mode="fullscreen",action="unset"}))')
+                if not w.get('floating'):
+                    self.command('eval hl.dispatch(hl.dsp.window.float({window='+selector+',action="on"}))')
+                # Query again after restoring the normal rectangle, without a focus change.
+                current = next((c for c in self.command('clients',True) if c['address']==w['address'] and c['pid']==w['pid']),None)
+                if not current or not self.eligible(current):
+                    raise Rejected('The selected window closed')
+                frame = self.fit((*current['at'], *current['size']),self.bounds(monitor))
+                self.apply(current,frame)
+                frame = self.settle(current,frame,self.bounds(monitor))
+                token = secrets.token_urlsafe(24)
+                self.gestures = {token:{'peer':peer,'stamp':stamp,'address':w['address'],'pid':w['pid'],
+                    'frame':frame,'mode':mode,'seq':-1,'expires':now+120,'delta':(0,0)}}
+                return {'ok':True,'token':token,'width':monitor['width']/monitor['scale'],
+                    'height':monitor['height']/monitor['scale']}
+            if action not in ('update','end'):
+                raise Rejected('Unknown operation')
+            g = self.gestures.get(request.get('token',''))
+            if not g or g['peer'] != peer or g['stamp'] != stamp:
+                raise Rejected('Select the window again after changing display mode')
+            seq = request.get('seq')
+            if type(seq) != int or not 0 <= seq < 2**53:
+                raise Rejected('Invalid update number')
+            if seq <= g['seq']:
+                return {'ok':True,'dx':g['delta'][0],'dy':g['delta'][1]}
+            dx,dy = request.get('dx'),request.get('dy')
+            if any(type(n) not in (int,float) or not math.isfinite(n) or abs(n)>100000 for n in (dx,dy)):
+                raise Rejected('Invalid finger movement')
+            window = next((c for c in self.command('clients',True) if c['address']==g['address'] and c['pid']==g['pid']),None)
+            if not window or not self.eligible(window):
+                self.gestures.pop(request['token'],None)
+                raise Rejected('The selected window is no longer on this desktop')
+            x,y,w,h = g['frame']
+            frame = (x+dx,y+dy,w,h) if g['mode']=='move' else (x,y,w+dx,h+dy)
+            # Resize anchors the top-left instead of shoving the window sideways.
+            bounds = self.bounds(monitor)
+            if g['mode']=='resize':
+                frame = (x,y,min(w+dx,bounds[2]-x),min(h+dy,bounds[3]-y))
+            frame = self.fit(frame,bounds)
+            self.apply(window,frame)
+            requested = frame
+            frame = self.settle(window,frame,bounds)
+            g.update(seq=seq, expires=now+120, delta=(frame[0]-x,frame[1]-y) if g['mode']=='move' else (frame[2]-w,frame[3]-h))
+            response = {'ok':True,'dx':g['delta'][0],'dy':g['delta'][1],
+                'limited':g['mode']=='resize' and (frame[2]>requested[2]+2 or frame[3]>requested[3]+2)}
+            if action=='end':
+                self.gestures.pop(request['token'])
+            return response
+
+class Pairing:
+    def __init__(self, state, cert, key):
+        self.state,self.cert,self.key = Path(state),str(cert),str(key)
+        self.lock = threading.Lock()
+        self.version = None
+        self.context = None
+        self.peers = set()
+
+    def refresh(self):
+        with self.lock:
+            try:
+                version = (self.state.stat().st_mtime_ns,self.state.stat().st_size)
+            except OSError:
+                version = None
+            if version == self.version and self.context:
+                return
+            certs=[]
+            for device in read(self.state).get('root',{}).get('named_devices',[]):
+                if str(device.get('enabled','true')).lower()!='true':
+                    continue
+                certs.append(device['cert'])
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(self.cert,self.key)
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.verify_flags = ssl.VERIFY_X509_PARTIAL_CHAIN | ssl.VERIFY_X509_TRUSTED_FIRST
+            if certs:
+                context.load_verify_locations(cadata='\n'.join(certs))
+            peers = {hashlib.sha256(ssl.PEM_cert_to_DER_cert(c)).hexdigest() for c in certs}
+            self.context,self.peers,self.version = context,peers,version
+
+    def authenticate(self, binary_cert):
+        self.refresh()
+        peer = hashlib.sha256(binary_cert or b'').hexdigest()
+        if peer not in self.peers:
+            raise Rejected('Client is not paired with Sunshine')
+        return peer
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+    def log_message(self,*args):
+        pass  # Never log credentials, request bodies, tokens or window titles.
+
+    def do_POST(self):
+        try:
+            if self.path != '/phone/window':
+                raise Rejected('Unknown endpoint')
+            peer = self.server.pairing.authenticate(self.connection.getpeercert(binary_form=True))
+            length = int(self.headers.get('Content-Length','0'))
+            if not 0<length<=4096 or self.headers.get('Transfer-Encoding'):
+                raise Rejected('Invalid request size')
+            request = json.loads(self.rfile.read(length))
+            response = self.server.desktop.handle(request,peer)
+            status = 200
+        except (Rejected,ValueError,KeyError) as error:
+            response,status = {'ok':False,'error':str(error)},409
+        except Exception:
+            response,status = {'ok':False,'error':'Window controls are temporarily unavailable'},503
+        data = json.dumps(response,allow_nan=False).encode()
+        self.send_response(status)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(data)))
+        self.send_header('Cache-Control','no-store')
+        if status != 200:
+            self.send_header('Connection','close')
+            self.close_connection = True
+        self.end_headers()
+        self.wfile.write(data)
+
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+    address_family = socket.AF_INET6
+    allow_reuse_address = True
+    def get_request(self):
+        sock,address = super().get_request()
+        sock.settimeout(3)
+        try:
+            self.pairing.refresh()
+            sock = self.pairing.context.wrap_socket(sock,server_side=True)
+            sock.settimeout(10)
+            sock.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
+            return sock,address
+        except Exception:
+            sock.close()
+            raise
+
+    def handle_error(self,request,client_address):
+        pass
+
+def main():
+    home=Path.home()
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--port',type=int,default=47992)
+    parser.add_argument('--bind',default='::')
+    parser.add_argument('--state-root',type=Path,default=home/'.local/state/omarchy')
+    parser.add_argument('--sunshine',type=Path,default=home/'.config/sunshine')
+    args=parser.parse_args()
+    desktop=Desktop(args.state_root)
+    pairing=Pairing(args.sunshine/'sunshine_state.json',args.sunshine/'credentials/cacert.pem',args.sunshine/'credentials/cakey.pem')
+    pairing.refresh()
+    server=Server((args.bind,args.port),Handler)
+    server.pairing,server.desktop=pairing,desktop
+    print('Phone window controls ready (paired TLS)',flush=True)
+    server.serve_forever()
+
+if __name__=='__main__':
+    main()

@@ -137,6 +137,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     CGSize _phoneWindowDesktopSize;
     NSUInteger _phoneWindowSequence, _phoneWindowGeneration;
     BOOL _phoneWindowBusy, _phoneWindowLimitShown;
+    BOOL _phoneWindowSettingsGesture, _phoneWindowToolboxGesture;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
     uint16_t overlayLevel;
@@ -1256,6 +1257,10 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     [self releasePhoneDrag];
     [self resetMagnifierStreamViewWithAnimated:NO];
     _phoneWindowMode = mode;
+    _phoneWindowSettingsGesture = _slideToSettingsRecognizer.enabled;
+    _phoneWindowToolboxGesture = _slideToToolboxRecognizer.enabled;
+    _slideToSettingsRecognizer.enabled = NO;
+    _slideToToolboxRecognizer.enabled = NO;
     _phoneWindowDelta = CGPointZero;
     _phoneWindowSent = CGPointZero;
     _phoneWindowSequence = 0;
@@ -1339,6 +1344,8 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     [_phoneWindowTimer invalidate]; _phoneWindowTimer = nil;
     _streamView.phoneWindowPan = nil;
     _streamView.phoneWindowControlActive = NO;
+    _slideToSettingsRecognizer.enabled = _phoneWindowSettingsGesture;
+    _slideToToolboxRecognizer.enabled = _phoneWindowToolboxGesture;
     HttpManager *manager = _phoneWindowHTTP;
     if (_phoneWindowToken) {
         [manager phoneWindowRequest:@{@"action":@"end", @"token":_phoneWindowToken,

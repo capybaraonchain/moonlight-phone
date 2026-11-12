@@ -31,3 +31,24 @@ this repository. Sign/install the resulting IPA with AltStore.
 
 The original GPL license and upstream authorship remain intact. Current
 VoidLink source and acknowledgments: https://github.com/The-Fried-Fish/VoidLink-previously-moonlight-zwm
+
+### Direct window controls (November 12 update)
+
+Tap an app, then choose **More → Move window** or **Resize window**. Slide one
+finger anywhere in the stream; lift and continue as needed. **Done** returns to
+native touch. These controls do not simulate a mouse or hold modifier keys.
+Dragging files is still the separate **Drag / Pick / Drop** control.
+
+The companion `host/omarchy-phone-window` uses port 47992 with mandatory mutual
+TLS. It reuses Sunshine's server certificate and trusts only enabled paired
+client certificates, including revocation on existing connections. It exposes
+only begin/update/end window geometry operations while the phone display lease
+is active. Gesture tokens are bound to the paired client, exact window/PID and
+phone-session resolution/nonce. The existing display-handoff lock excludes
+rotation conflicts; special Agent Desktop windows are excluded. It never changes
+outputs, restarts apps or invokes a shell with client input.
+
+The host preserves title-bar clearance and clamps movement to the usable area.
+Applications that insist on a minimum size remain anchored; the phone explains
+the limit instead of silently sending ineffective mouse input. Use Roomy layout
+for applications that need more desktop space.
