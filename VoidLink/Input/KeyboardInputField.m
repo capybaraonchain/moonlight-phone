@@ -20,6 +20,7 @@
         self.backspaceHandler();
         return;
     }
+    if (self.emptyBackspaceHandler && self.text.length == 0) self.emptyBackspaceHandler();
 
     [super deleteBackward];
 }

@@ -391,12 +391,12 @@ class Desktop:
                     probe=Path(__file__).with_name('omarchy-phone-focus')
                     r=subprocess.run([str(probe),json.dumps(payload)],env=self.env,capture_output=True,text=True,timeout=.85)
                     found=json.loads(r.stdout) if r.returncode==0 else {}
-                    editable,plain=bool(found.get('editable')),bool(found.get('plain'))
-                except (OSError,ValueError,subprocess.TimeoutExpired): editable=plain=False
+                    editable,plain,start=bool(found.get('editable')),bool(found.get('plain')),bool(found.get('start'))
+                except (OSError,ValueError,subprocess.TimeoutExpired): editable=plain=start=False
                 current=self.command('activewindow',True)
                 if self.context()[0]!=stamp or current.get('address')!=w['address'] or current.get('pid')!=w['pid']:
                     editable=False
-                return {'ok':True,'editable':editable,'plain':editable and plain}
+                return {'ok':True,'editable':editable,'plain':editable and plain,'start':editable and start}
             if action == 'begin':
                 mode = request.get('mode')
                 if mode not in ('move','resize'):

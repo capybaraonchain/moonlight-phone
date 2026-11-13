@@ -32,6 +32,25 @@ static inline PhoneTextEdit PhoneTextDiff(const uint16_t *before, size_t beforeL
     return (PhoneTextEdit){prefix, deletes};
 }
 
+// Text typed before the last touch may no longer sit in front of the desktop
+// caret. A plain Backspace is still safe there, but an edit that rewrites it
+// (autocorrect reaching back) only replaces what was typed after `floor`.
+static inline PhoneTextEdit PhoneTextDiffFrom(const uint16_t *before, size_t beforeLength,
+                                              const uint16_t *after, size_t afterLength, size_t floor) {
+    PhoneTextEdit edit = PhoneTextDiff(before, beforeLength, after, afterLength);
+    if (edit.prefix >= floor || edit.prefix >= afterLength) return edit;
+    size_t keep = floor;
+    if (keep > beforeLength) keep = beforeLength;
+    if (keep > afterLength) keep = afterLength;
+    if (keep > 0 && ((keep < beforeLength && PhoneTextIsTrailSurrogate(before[keep])) ||
+                     (keep < afterLength && PhoneTextIsTrailSurrogate(after[keep])))) keep--;
+    size_t deletes = 0;
+    for (size_t i = keep; i < beforeLength; i++) {
+        if (!PhoneTextIsTrailSurrogate(before[i])) deletes++;
+    }
+    return (PhoneTextEdit){keep, deletes};
+}
+
 // Edge swipes: a finger that starts in the narrow strip beside the screen edge
 // is kept off the desktop until it proves to be a swipe, a tap or neither.
 typedef enum { PhoneEdgeNone = 0, PhoneEdgeLeft = 1, PhoneEdgeRight = 2 } PhoneEdge;

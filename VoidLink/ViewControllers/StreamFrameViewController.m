@@ -1943,6 +1943,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                 BOOL editable = [result[@"editable"] boolValue];
                 if (editable) [current->_streamView setPhoneKeyboardPlain:[result[@"plain"] boolValue]];
                 [current->_streamView setPhoneKeyboardVisible:editable];
+                if (editable) [current->_streamView setPhoneTypingFresh:[result[@"start"] boolValue]];
             }];
         });
     };

@@ -40,6 +40,23 @@ int main(void) {
     e = DIFF(('c', 'a', 't', 's'), ('c', 'u', 't', 's'));
     assert(e.prefix == 1 && e.deletes == 3);
 
+    // After a touch at "hel|", continuing to type is unaffected.
+    e = PhoneTextDiffFrom(U('h', 'e', 'l'), 3, U('h', 'e', 'l', 'l', 'o'), 5, 3);
+    assert(e.prefix == 3 && e.deletes == 0);
+    // Backspace into text typed before the touch still deletes one character.
+    e = PhoneTextDiffFrom(U('h', 'e', 'l'), 3, U('h', 'e'), 2, 3);
+    assert(e.prefix == 2 && e.deletes == 1);
+    // Autocorrect rewriting "teh" -> "the" where "te" predates the touch:
+    // only what followed the touch is replaced.
+    e = PhoneTextDiffFrom(U('t', 'e', 'h'), 3, U('t', 'h', 'e'), 3, 2);
+    assert(e.prefix == 2 && e.deletes == 1);
+    // The same rewrite with nothing before the touch is applied in full.
+    e = PhoneTextDiffFrom(U('t', 'e', 'h'), 3, U('t', 'h', 'e'), 3, 0);
+    assert(e.prefix == 1 && e.deletes == 2);
+    // A rewrite that shortens the text below the floor keeps to its length.
+    e = PhoneTextDiffFrom(U('a', 'b', 'c', 'd'), 4, U('x', 'y'), 2, 3);
+    assert(e.prefix == 2 && e.deletes == 2);
+
     assert(PhoneEdgeAt(3, 393, 12) == PhoneEdgeLeft);
     assert(PhoneEdgeAt(390, 393, 12) == PhoneEdgeRight);
     assert(PhoneEdgeAt(200, 393, 12) == PhoneEdgeNone);

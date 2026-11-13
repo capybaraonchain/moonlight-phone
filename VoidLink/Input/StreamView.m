@@ -117,6 +117,8 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
 #if !TARGET_OS_TV
     // Phone desktop keyboard: what the iPhone keyboard believes was typed.
     NSString *phoneTyped;
+    NSString *phonePrefix;      // invisible marker standing in for text before the caret, or empty
+    NSUInteger phoneFloor;      // what was typed before the last touch ends here
     dispatch_queue_t phoneKeyQueue;
     BOOL phonePlainKeyboard;
     UITouch *phoneEdgeFinger;
@@ -205,8 +207,11 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
 #if !TARGET_OS_TV
     if (phoneDesktopInput) {
         phoneTyped = @"";
+        phonePrefix = KeyboardInputSentinel;
         phoneKeyQueue = dispatch_queue_create("com.moonlight.PhoneKeyboard", DISPATCH_QUEUE_SERIAL);
         [self applyPhoneKeyboardTraits];
+        __weak typeof(self) weakSelf = self;
+        keyInputField.emptyBackspaceHandler = ^{ [weakSelf phoneSendDeletes:1 text:@""]; };
     }
 #endif
     [self addSubview:keyInputField];
@@ -789,6 +794,8 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
         keyInputField.text = KeyboardInputSentinel;
 #if !TARGET_OS_TV
         phoneTyped = @"";
+        phonePrefix = KeyboardInputSentinel;
+        phoneFloor = 0;
 #endif
     #if !TARGET_OS_TV
     // Prepare the toolbar above the keyboard for more options
@@ -1441,9 +1448,9 @@ static CGFloat previousRollAngle = 0;
         UITouch *finger=touches.anyObject;
         phoneTypingFinger=(event.allTouches.count==1 && finger.type==UITouchTypeDirect) ? finger : nil;
         phoneTypingStart=[finger locationInView:self];phoneTypingMoved=NO;phoneTypingBegan=event.timestamp;
-        // A touch may move the desktop caret: what was typed before is no
-        // longer the text in front of it.
-        [self resetPhoneTypedText];
+        // A touch may move the desktop caret: what was typed before stays as
+        // context for the keyboard, but is no longer rewritten on the desktop.
+        phoneFloor = phoneTyped.length;
         [self armPhoneHoldHaptic];
     }
     if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_DOWN]) return;
@@ -2072,7 +2079,7 @@ static CGFloat previousRollAngle = 0;
             usleep(30 * 1000);
             LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
         });
-        [self resetPhoneTypedText];
+        [self setPhoneTypingFresh:YES];
         if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
         [self setPhoneKeyboardVisible:NO];
         return NO;
@@ -2400,14 +2407,23 @@ static CGFloat previousRollAngle = 0;
     if (keyInputField.isFirstResponder) [keyInputField reloadInputViews];
 }
 
-- (void)resetPhoneTypedText {
+// The hidden field starts either empty (the desktop caret begins new text, so
+// iOS capitalises the first letter) or with an invisible marker standing in
+// for whatever precedes the caret.
+- (void)setPhoneTypingFresh:(BOOL)fresh {
     if (!phoneDesktopInput) return;
     phoneTyped = @"";
-    if (!keyInputField.isFirstResponder || [keyInputField.text isEqualToString:KeyboardInputSentinel]) return;
+    phoneFloor = 0;
+    phonePrefix = fresh ? @"" : KeyboardInputSentinel;
+    if (!keyInputField.isFirstResponder || [keyInputField.text isEqualToString:phonePrefix]) return;
     if (keyInputField.markedTextRange) [keyInputField unmarkText];
-    keyInputField.text = KeyboardInputSentinel;
+    keyInputField.text = phonePrefix;
     UITextPosition *end = keyInputField.endOfDocument;
     keyInputField.selectedTextRange = [keyInputField textRangeFromPosition:end toPosition:end];
+}
+
+- (void)resetPhoneTypedText {
+    [self setPhoneTypingFresh:NO];
 }
 
 // The iPhone keyboard owns a running copy of the text, so autocorrect,
@@ -2415,30 +2431,37 @@ static CGFloat previousRollAngle = 0;
 // to the desktop as "remove N characters, then type this".
 - (void)phoneTextChanged:(UITextField *)textField {
     NSString *text = textField.text ?: @"";
-    BOOL sentinel = [text hasPrefix:KeyboardInputSentinel];
-    NSString *now = sentinel ? [text substringFromIndex:KeyboardInputSentinel.length] : text;
+    NSString *prefix = phonePrefix ?: @"";
+    BOOL marked = prefix.length == 0 || [text hasPrefix:prefix];
+    NSString *now = marked ? [text substringFromIndex:prefix.length] : text;
     NSString *before = phoneTyped ?: @"";
     NSUInteger deletes = 0;
     NSString *added = @"";
-    if (!sentinel && before.length == 0 && now.length == 0) {
-        // Backspace with nothing typed here deletes on the desktop.
+    if (!marked && before.length == 0 && now.length == 0) {
+        // Backspace took the marker: nothing typed here, so delete on the desktop.
         deletes = 1;
     } else {
         NSUInteger beforeLength = before.length, nowLength = now.length;
         unichar *a = malloc(sizeof(unichar) * (beforeLength + 1)), *b = malloc(sizeof(unichar) * (nowLength + 1));
         [before getCharacters:a range:NSMakeRange(0, beforeLength)];
         [now getCharacters:b range:NSMakeRange(0, nowLength)];
-        PhoneTextEdit edit = PhoneTextDiff(a, beforeLength, b, nowLength);
+        PhoneTextEdit edit = PhoneTextDiffFrom(a, beforeLength, b, nowLength, phoneFloor);
         free(a); free(b);
         deletes = edit.deletes;
         added = [now substringFromIndex:edit.prefix];
     }
+    if (now.length > 600) {
+        // Keep the recent text as keyboard context without growing forever.
+        NSUInteger cut = [now rangeOfComposedCharacterSequenceAtIndex:now.length - 200].location;
+        now = [now substringFromIndex:cut];
+        phonePrefix = prefix = KeyboardInputSentinel;
+        phoneFloor = phoneFloor > cut ? phoneFloor - cut : 0;
+        marked = NO;
+    }
     phoneTyped = now;
-    if (!sentinel || now.length > 600) {
-        // Restore the marker that makes an empty field's Backspace visible,
-        // and keep the local copy from growing without bound.
-        if (now.length > 600) { phoneTyped = @""; now = @""; }
-        textField.text = [KeyboardInputSentinel stringByAppendingString:now];
+    if (phoneFloor > now.length) phoneFloor = now.length;
+    if (!marked) {
+        textField.text = [prefix stringByAppendingString:now];
         UITextPosition *end = textField.endOfDocument;
         textField.selectedTextRange = [textField textRangeFromPosition:end toPosition:end];
     }

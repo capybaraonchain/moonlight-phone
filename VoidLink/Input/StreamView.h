@@ -72,6 +72,8 @@ NS_INLINE StreamInputGeometry StreamInputGeometryMake(CGRect bounds, CGFloat asp
 // Terminals and password fields want a keyboard without autocorrect.
 - (void)setPhoneKeyboardPlain:(BOOL)plain;
 - (void)resetPhoneTypedText;
+// YES when the desktop caret begins new text, so the first letter is capitalised.
+- (void)setPhoneTypingFresh:(BOOL)fresh;
 #endif
 // Edge swipes: edge 1 left / 2 right; phase 0 began, 1 moved, 2 swiped, 3 abandoned.
 @property (copy, nonatomic) void (^phoneEdgeEvent)(NSInteger edge, NSInteger phase, CGFloat travel, CGFloat y);

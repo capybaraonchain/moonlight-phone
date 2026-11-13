@@ -13,6 +13,8 @@ NS_ASSUME_NONNULL_BEGIN
 @interface KeyboardInputField : UITextField
 
 @property (nonatomic, copy, nullable) void (^backspaceHandler)(void);
+// Backspace pressed while the field is empty: UIKit reports no change for it.
+@property (nonatomic, copy, nullable) void (^emptyBackspaceHandler)(void);
 
 @end
 
