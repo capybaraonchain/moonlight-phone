@@ -112,7 +112,7 @@ final class DeeplinkCoordinator: NSObject {
         url.path.isEmpty && url.query == nil && url.fragment == nil && url.user == nil && url.password == nil && url.port == nil
     }
 
-    func open(_ url: URL) {
+    @MainActor func open(_ url: URL) {
 #if os(iOS)
         if Self.isOmarchyURL(url) {
             do { try Self.openOmarchyShortcut() } catch { showNotice(error.localizedDescription) }
