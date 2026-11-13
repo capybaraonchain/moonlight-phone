@@ -14,6 +14,25 @@ def editable_at(w,point):
         app=desktop.get_child_at_index(i)
         if app.get_process_id()!=w['pid']: continue
         stack=[(app,0,None)]
+        try:
+            collection=app.get_collection_iface()
+            if collection:
+                states=Atspi.StateSet.new([Atspi.StateType.FOCUSED,Atspi.StateType.EDITABLE])
+                rule=Atspi.MatchRule.new(states,Atspi.CollectionMatchType.ALL,{},Atspi.CollectionMatchType.ALL,[],Atspi.CollectionMatchType.ALL,[],Atspi.CollectionMatchType.ALL,False)
+                matches=collection.get_matches(rule,Atspi.CollectionSortOrder.CANONICAL,1,True)
+                if matches:
+                    node=matches[0];parent=node;frame=None
+                    for _ in range(28):
+                        if not parent: break
+                        if parent.get_role() in (Atspi.Role.FRAME,Atspi.Role.WINDOW):
+                            c=parent.get_component_iface()
+                            if c:
+                                r=c.get_extents(Atspi.CoordType.SCREEN)
+                                if r.width>0 and r.height>0: frame=(r.x,r.y,r.width,r.height)
+                            break
+                        parent=parent.get_parent()
+                    stack=[(node,0,frame)]
+        except Exception: pass
         while stack and budget>0 and time.monotonic()<deadline:
             node,depth,frame=stack.pop();budget-=1
             try:

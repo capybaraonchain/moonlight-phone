@@ -75,3 +75,18 @@ In Shortcuts, create a shortcut named **Omarchy** containing **Open Omarchy**
 from Moonlight Phone. Add it to Home Screen, select it in a Shortcuts widget,
 or add a Shortcut control in Control Center and choose Omarchy. This uses
 Apple's built-in widgets and controls and needs no additional signed extension.
+
+### Native widgets, controls and text input
+
+Keep app extensions when AltStore asks. **Omarchy** is now offered as a Lock
+Screen circular/rectangular/inline widget and a small Home Screen widget. Its
+control is available in Control Center and the Lock Screen's bottom controls.
+Both open the paired desktop through the existing Open Omarchy flow. iOS may
+require Face ID/unlock before opening the app.
+
+A brief tap inside an accessible editable field opens the keyboard automatically.
+Enter sends Return to the desktop and dismisses the keyboard. Focus checks run
+locally on the host over the existing paired TLS connection and expose only a
+boolean; text and field values are never read. Unsupported accessibility falls
+back to Type. Electron/Chrome need accessibility enabled; configured launchers
+use --force-renderer-accessibility on their next launch.
