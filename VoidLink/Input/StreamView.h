@@ -65,6 +65,16 @@ NS_INLINE StreamInputGeometry StreamInputGeometryMake(CGRect bounds, CGFloat asp
 @property (copy, nonatomic) void (^phoneWindowPan)(CGPoint delta);
 @property (copy, nonatomic) void (^phoneTextFocusEvent)(BOOL tap, CGPoint point);
 - (void)setPhoneKeyboardVisible:(BOOL)visible;
+// Phone desktop typing. The sender runs off the main thread, in order, and
+// returns NO when the paired host cannot type the edit (key events follow).
+@property (copy, nonatomic) BOOL (^phoneTextSender)(NSUInteger deletes, NSString *text);
+#if !TARGET_OS_TV
+// Terminals and password fields want a keyboard without autocorrect.
+- (void)setPhoneKeyboardPlain:(BOOL)plain;
+- (void)resetPhoneTypedText;
+#endif
+// Edge swipes: edge 1 left / 2 right; phase 0 began, 1 moved, 2 swiped, 3 abandoned.
+@property (copy, nonatomic) void (^phoneEdgeEvent)(NSInteger edge, NSInteger phase, CGFloat travel, CGFloat y);
 
 - (void) setupStreamViewWithControllerSupport:(ControllerSupport*)controllerSupport
                           interactionDelegate:(id<UserInteractionDelegate>)interactionDelegate

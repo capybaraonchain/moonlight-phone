@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Paired phone window geometry, never mouse emulation or output management."""
+"""Paired phone window geometry, text-focus hints, typed text and clipboard text.
+
+Never mouse emulation, output management, logging of request bodies or a shell
+fed with client input. Text from the phone keyboard is typed through a virtual
+keyboard, so it is independent of the desktop keyboard layout."""
 import argparse
 from contextlib import contextmanager
 import fcntl
@@ -13,6 +17,7 @@ import re
 import secrets
 import socket
 import ssl
+import struct
 import subprocess
 import threading
 import time
@@ -20,11 +25,141 @@ import time
 class Rejected(Exception):
     pass
 
+CLIPBOARD_LIMIT = 256*1024
+# Terminal emulators have no accessible "editable" field; a tap inside one
+# still wants the keyboard, without autocorrect or capitalisation.
+TERMINALS = re.compile(r'(?i)(^|[.\-_])(ghostty|alacritty|kitty|foot|footclient|wezterm|ptyxis|konsole|xterm|console|terminal|kgx|tui)([.\-_]|$)')
+
 def read(path):
     try:
         return json.loads(Path(path).read_text())
     except (OSError, ValueError):
         return {}
+
+# Ordinary printable key positions (evdev codes): the digit row and the three
+# letter rows. Characters are only ever placed here; Backspace, Tab and Return
+# keep their real positions, because Chromium decides what some keys mean from
+# their position, not from the symbol the keymap gives them.
+TYPIST_SLOTS = [*range(2, 14), *range(16, 28), *range(30, 42), *range(43, 54)]
+TYPIST_KEYS = {'\b': (14, 'BackSpace'), '\t': (15, 'Tab'), '\n': (28, 'Return')}
+
+
+class Typist:
+    """One short-lived Wayland client that types a sequence, then goes away."""
+
+    def __init__(self, env):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(2)
+        self.sock.connect(os.path.join(env['XDG_RUNTIME_DIR'], env.get('WAYLAND_DISPLAY', 'wayland-1')))
+        self.ids = 1
+        self.pending = b''
+        registry = self.new_id()
+        self.send(1, 1, struct.pack('<I', registry))
+        found = {}
+
+        def on_global(obj, opcode, data):
+            if obj == registry and opcode == 0:
+                name, size = struct.unpack_from('<II', data)
+                found[data[8:8 + size - 1].decode()] = name
+
+        self.roundtrip(on_global)
+        if 'wl_seat' not in found or 'zwp_virtual_keyboard_manager_v1' not in found:
+            raise OSError('The compositor has no virtual keyboard')
+        self.seat, self.manager, self.keyboard = self.new_id(), self.new_id(), None
+        self.bind(registry, found['wl_seat'], 'wl_seat', self.seat)
+        self.bind(registry, found['zwp_virtual_keyboard_manager_v1'], 'zwp_virtual_keyboard_manager_v1', self.manager)
+
+    def new_id(self):
+        self.ids += 1
+        return self.ids
+
+    def send(self, obj, opcode, payload=b'', fds=()):
+        message = struct.pack('<II', obj, (8 + len(payload)) << 16 | opcode) + payload
+        if fds:
+            socket.send_fds(self.sock, [message], list(fds))
+        else:
+            self.sock.sendall(message)
+
+    def bind(self, registry, name, interface, new):
+        text = interface.encode() + b'\0'
+        text += b'\0' * (-len(text) % 4)
+        self.send(registry, 0, struct.pack('<II', name, len(interface) + 1) + text + struct.pack('<II', 1, new))
+
+    def roundtrip(self, handler=None):
+        # wl_display.sync: everything sent before it has been handled once its
+        # callback fires. A protocol error arrives as an event on the display.
+        callback = self.new_id()
+        self.send(1, 0, struct.pack('<I', callback))
+        while True:
+            while len(self.pending) < 8 or len(self.pending) < struct.unpack_from('<I', self.pending, 4)[0] >> 16:
+                data = self.sock.recv(65536)
+                if not data:
+                    raise OSError('The compositor closed the connection')
+                self.pending += data
+            obj, word = struct.unpack_from('<II', self.pending)
+            size, opcode = word >> 16, word & 0xffff
+            body, self.pending = self.pending[8:size], self.pending[size:]
+            if obj == 1 and opcode == 0:
+                raise OSError('The compositor refused the virtual keyboard')
+            if obj == callback:
+                return
+            if handler:
+                handler(obj, opcode, body)
+
+    def keymap(self, slots):
+        # A keymap is honoured once per virtual keyboard, so every batch of
+        # characters gets a fresh keyboard carrying its complete keymap.
+        if self.keyboard:
+            self.send(self.keyboard, 3)
+        self.keyboard = self.new_id()
+        self.send(self.manager, 0, struct.pack('<II', self.seat, self.keyboard))
+        codes = {code: name for code, name in TYPIST_KEYS.values()}
+        codes.update({code: 'U%04X' % ord(char) for char, code in slots.items()})
+        text = ('xkb_keymap {\nxkb_keycodes "phone" { minimum = 8; maximum = 255;\n'
+                + ''.join(f'<K{c + 8}> = {c + 8};\n' for c in codes)
+                + '};\nxkb_types "phone" { include "complete" };\n'
+                'xkb_compatibility "phone" { include "complete" };\nxkb_symbols "phone" {\n'
+                + ''.join(f'key <K{c + 8}> {{ [ {name} ] }};\n' for c, name in codes.items())
+                + '};\n};\n').encode() + b'\0'
+        fd = os.memfd_create('phone-keymap')
+        try:
+            os.write(fd, text)
+            # format 1 is XKB v1; the descriptor travels beside the message.
+            self.send(self.keyboard, 0, struct.pack('<II', 1, len(text)), [fd])
+        finally:
+            os.close(fd)
+        self.send(self.keyboard, 2, struct.pack('<IIII', 0, 0, 0, 0))
+
+    def type(self, sequence):
+        batch, slots = [], {}
+        for char in [*sequence, None]:
+            full = char is not None and char not in TYPIST_KEYS and char not in slots and len(slots) == len(TYPIST_SLOTS)
+            if (char is None or full) and batch:
+                self.keymap(slots)
+                for code in batch:
+                    stamp = int(time.monotonic() * 1000) & 0xffffffff
+                    self.send(self.keyboard, 1, struct.pack('<III', stamp, code, 1))
+                    self.send(self.keyboard, 1, struct.pack('<III', stamp, code, 0))
+                self.roundtrip()
+                # An input method relays these keys onward with this keymap;
+                # replacing or removing the keyboard sooner loses them.
+                time.sleep(.03 + .0005 * len(batch))
+                batch, slots = [], {}
+            if char is None:
+                break
+            if char in TYPIST_KEYS:
+                batch.append(TYPIST_KEYS[char][0])
+            else:
+                batch.append(slots.setdefault(char, TYPIST_SLOTS[len(slots)]))
+
+    def close(self):
+        try:
+            if self.keyboard:
+                self.send(self.keyboard, 3)
+            self.roundtrip()
+        except OSError:
+            pass
+        self.sock.close()
 
 class Desktop:
     def __init__(self, root, env=None):
@@ -131,9 +266,101 @@ class Desktop:
         if ops:
             self.command('eval ' + ';'.join(ops))
 
+    def terminal(self, window):
+        # Omarchy tags its terminal windows; the class list covers the rest.
+        tags = {str(t).rstrip('*') for t in window.get('tags',[])}
+        return 'terminal' in tags or bool(TERMINALS.search(str(window.get('class',''))))
+
+    def clipboard(self, request):
+        # Plain text only, and only while this compositor is on the phone display.
+        self.context()
+        op = request.get('op')
+        if op == 'set':
+            text = request.get('text')
+            if type(text) != str or not text or '\x00' in text:
+                raise Rejected('Nothing to paste')
+            data = text.encode()
+            if len(data) > CLIPBOARD_LIMIT:
+                raise Rejected('That text is too long to send to the desktop')
+            try:
+                # wl-copy keeps serving the selection from a detached child.
+                done = subprocess.run(['wl-copy','--type','text/plain;charset=utf-8'],input=data,env=self.env,
+                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=2)
+            except (OSError,subprocess.TimeoutExpired):
+                raise Rejected('The desktop clipboard is unavailable')
+            if done.returncode != 0:
+                raise Rejected('The desktop clipboard is unavailable')
+            # The hash lets the phone recognise this text as its own later.
+            return {'ok':True,'terminal':self.terminal(self.command('activewindow',True)),'hash':hashlib.sha256(data).hexdigest()}
+        if op not in ('get','hash'):
+            raise Rejected('Unknown operation')
+        try:
+            kinds = subprocess.run(['wl-paste','--list-types'],env=self.env,capture_output=True,text=True,timeout=1.5)
+            types = kinds.stdout.split() if kinds.returncode == 0 else []
+            # Password managers flag secrets; never forward those.
+            if not any(t.startswith('text/') or t in ('UTF8_STRING','STRING','TEXT') for t in types) or 'x-kde-passwordManagerHint' in types:
+                return {'ok':True,'empty':True}
+            paste = subprocess.run(['wl-paste','--no-newline','--type','text'],env=self.env,capture_output=True,timeout=1.5)
+        except (OSError,subprocess.TimeoutExpired):
+            raise Rejected('The desktop clipboard is unavailable')
+        data = paste.stdout
+        if paste.returncode != 0 or not data:
+            return {'ok':True,'empty':True}
+        if len(data) > CLIPBOARD_LIMIT:
+            raise Rejected('The desktop clipboard is too large to copy to the phone')
+        digest = hashlib.sha256(data).hexdigest()
+        if op == 'hash' or request.get('known') == digest:
+            return {'ok':True,'hash':digest,'changed':False}
+        return {'ok':True,'hash':digest,'changed':True,'text':data.decode('utf-8','replace')}
+
+    def text(self, request):
+        # The phone keyboard's edits since its last report: remove `delete`
+        # characters before the caret, then type `text`. The virtual keyboard
+        # carries its own keymap, so accents and symbols arrive intact whatever
+        # layout the desktop uses. (Chromium cannot take characters beyond the
+        # Basic Multilingual Plane, such as emoji, from any keyboard.)
+        self.context()
+        delete,text = request.get('delete',0),request.get('text','')
+        if type(delete) != int or not 0 <= delete <= 2000 or type(text) != str or len(text) > 8000:
+            raise Rejected('Invalid text')
+        if any((ord(c) < 32 and c not in '\n\t') or ord(c) == 127 for c in text):
+            raise Rejected('Invalid text')
+        if not delete and not text:
+            return {'ok':True}
+        if not self.eligible(self.command('activewindow',True)):
+            raise Rejected('Tap a desktop app first')
+        typist = None
+        try:
+            typist = Typist(self.env)
+            typist.type('\b'*delete + text)
+        except (OSError,KeyError,struct.error):
+            raise Rejected('Typing is unavailable')
+        finally:
+            if typist: typist.close()
+        return {'ok':True}
+
+    def chrome(self, request):
+        value = request.get('toolbar')
+        if value not in ('hidden','visible'):
+            raise Rejected('Unknown operation')
+        self.context()
+        try:
+            # The display helper owns the shared lock and the reservation.
+            done = subprocess.run([str(Path(__file__).with_name('omarchy-phone-mode')),'toolbar',value],env=self.env,
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=8)
+        except (OSError,subprocess.TimeoutExpired):
+            raise Rejected('The display is changing. Try again after rotation.')
+        if done.returncode != 0:
+            raise Rejected('Window controls are available during a phone stream')
+        return {'ok':True}
+
     def handle(self, request, peer):
         if not isinstance(request, dict):
             raise Rejected('Invalid request')
+        direct = {'clipboard':self.clipboard,'chrome':self.chrome,'text':self.text}.get(request.get('action'))
+        if direct:
+            with self.mutex:
+                return direct(request)
         with self.mutex, self.display_lock():
             now = time.monotonic()
             self.gestures = {k:g for k,g in self.gestures.items() if g['expires'] > now}
@@ -144,6 +371,11 @@ class Desktop:
                     self.gestures.pop(request['token'])
                 return {'ok':True}
             stamp, monitor = self.context()
+            if action == 'context':
+                # For the manual Type button: which keyboard suits the active app.
+                w=self.command('activewindow',True)
+                terminal=self.eligible(w) and self.terminal(w)
+                return {'ok':True,'plain':terminal,'terminal':terminal}
             if action == 'focus':
                 x,y=request.get('x'),request.get('y')
                 if any(type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=1 for v in (x,y)):
@@ -151,16 +383,20 @@ class Desktop:
                 w=self.command('activewindow',True)
                 if not self.eligible(w): return {'ok':True,'editable':False}
                 point=[monitor['x']+x*monitor['width']/monitor['scale'],monitor['y']+y*monitor['height']/monitor['scale']]
+                if self.terminal(w):
+                    inside=w['at'][0]<=point[0]<=w['at'][0]+w['size'][0] and w['at'][1]<=point[1]<=w['at'][1]+w['size'][1]
+                    return {'ok':True,'editable':inside,'plain':True,'terminal':True}
                 payload={'window':{k:w[k] for k in ('pid','at','size')},'point':point}
                 try:
                     probe=Path(__file__).with_name('omarchy-phone-focus')
                     r=subprocess.run([str(probe),json.dumps(payload)],env=self.env,capture_output=True,text=True,timeout=.85)
-                    editable=bool(json.loads(r.stdout).get('editable')) if r.returncode==0 else False
-                except (OSError,ValueError,subprocess.TimeoutExpired): editable=False
+                    found=json.loads(r.stdout) if r.returncode==0 else {}
+                    editable,plain=bool(found.get('editable')),bool(found.get('plain'))
+                except (OSError,ValueError,subprocess.TimeoutExpired): editable=plain=False
                 current=self.command('activewindow',True)
                 if self.context()[0]!=stamp or current.get('address')!=w['address'] or current.get('pid')!=w['pid']:
                     editable=False
-                return {'ok':True,'editable':editable}
+                return {'ok':True,'editable':editable,'plain':editable and plain}
             if action == 'begin':
                 mode = request.get('mode')
                 if mode not in ('move','resize'):
@@ -266,7 +502,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise Rejected('Unknown endpoint')
             peer = self.server.pairing.authenticate(self.connection.getpeercert(binary_form=True))
             length = int(self.headers.get('Content-Length','0'))
-            if not 0<length<=4096 or self.headers.get('Transfer-Encoding'):
+            if not 0<length<=4*CLIPBOARD_LIMIT or self.headers.get('Transfer-Encoding'):
                 raise Rejected('Invalid request size')
             request = json.loads(self.rfile.read(length))
             response = self.server.desktop.handle(request,peer)

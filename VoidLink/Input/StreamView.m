@@ -27,6 +27,7 @@
 #import "CustomTapGestureRecognizer.h"
 #endif
 #import "KeyboardInputField.h"
+#import "PhoneTextEdit.h"
 #import "LocalizationHelper.h"
 #import "StreamFrameViewController.h"
 #import "SceneDelegate.h"
@@ -113,6 +114,17 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
     UILabel* keyboardToggleTip;
     
     UIKeyModifierFlags comboKeyModifierFlags;
+#if !TARGET_OS_TV
+    // Phone desktop keyboard: what the iPhone keyboard believes was typed.
+    NSString *phoneTyped;
+    dispatch_queue_t phoneKeyQueue;
+    BOOL phonePlainKeyboard;
+    UITouch *phoneEdgeFinger;
+    PhoneEdge phoneEdge;
+    CGPoint phoneEdgeStart;
+    NSTimeInterval phoneEdgeBegan;
+    NSUInteger phoneHoldGeneration;
+#endif
     
     WidgetSizeTransition _widgetSizeTransition;
     OSCProfilesManager* oscProfileMan;
@@ -190,6 +202,13 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
     [keyInputField setAutocorrectionType:UITextAutocorrectionTypeNo];
     [keyInputField setAutocapitalizationType:UITextAutocapitalizationTypeNone];
     [keyInputField setSpellCheckingType:UITextSpellCheckingTypeNo];
+#if !TARGET_OS_TV
+    if (phoneDesktopInput) {
+        phoneTyped = @"";
+        phoneKeyQueue = dispatch_queue_create("com.moonlight.PhoneKeyboard", DISPATCH_QUEUE_SERIAL);
+        [self applyPhoneKeyboardTraits];
+    }
+#endif
     [self addSubview:keyInputField];
     
     isInputingText = false;
@@ -451,6 +470,23 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
         return;
     }
 
+    if (phoneDesktopInput && !settings.liftStreamViewForKeyboard && !isInputingText && keyInputField.isFirstResponder) {
+        // Chat boxes sit at the bottom of their window, right where the keyboard
+        // opens. Raise the picture just enough to keep the tapped field above
+        // the keyboard, its key bar and the phone toolbar.
+        isInputingText = true;
+        CGRect keyboard = [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+        CGFloat screenHeight = [PublicUtils screenForView:self].bounds.size.height;
+        CGFloat clear = screenHeight - keyboard.size.height - 104;
+        CGFloat tapped = [self convertPoint:phoneTypingStart toView:nil].y;
+        HeightViewLiftedTo = MAX(0, MIN(tapped - clear, keyboard.size.height));
+        if (HeightViewLiftedTo > 0) {
+            CGRect lifted = self.frame;
+            lifted.origin.y -= HeightViewLiftedTo;
+            self.frame = lifted;
+            [self liftMetalVideoViewIfNeeded:HeightViewLiftedTo];
+        }
+    }
     if(settings.liftStreamViewForKeyboard && !isInputingText){
         isInputingText = true;
         
@@ -751,6 +787,9 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
         // Prepare the textbox used to capture keyboard events.
         keyInputField.delegate = self;
         keyInputField.text = KeyboardInputSentinel;
+#if !TARGET_OS_TV
+        phoneTyped = @"";
+#endif
     #if !TARGET_OS_TV
     // Prepare the toolbar above the keyboard for more options
         if(settings.showKeyboardToolbar){
@@ -1402,6 +1441,10 @@ static CGFloat previousRollAngle = 0;
         UITouch *finger=touches.anyObject;
         phoneTypingFinger=(event.allTouches.count==1 && finger.type==UITouchTypeDirect) ? finger : nil;
         phoneTypingStart=[finger locationInView:self];phoneTypingMoved=NO;phoneTypingBegan=event.timestamp;
+        // A touch may move the desktop caret: what was typed before is no
+        // longer the text in front of it.
+        [self resetPhoneTypedText];
+        [self armPhoneHoldHaptic];
     }
     if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_DOWN]) return;
 
@@ -1473,6 +1516,9 @@ static CGFloat previousRollAngle = 0;
 }
 
 - (void)toolbarButtonClicked:(UIButton *)sender {
+#if !TARGET_OS_TV
+    [self resetPhoneTypedText];   // Tab, Escape and friends move the desktop caret.
+#endif
     BOOL isToggleable = [objc_getAssociatedObject(sender, "isToggleable") boolValue];
     BOOL isOn = [objc_getAssociatedObject(sender, "isOn") boolValue];
     if (isToggleable){
@@ -1846,7 +1892,7 @@ static CGFloat previousRollAngle = 0;
     }
 
 #if !TARGET_OS_TV
-    if (phoneTouchIDs.count) { [self cancelPhoneTouches]; return; }
+    if (phoneTouchIDs.count || phoneEdgeFinger) { [self cancelPhoneTouches]; return; }
     if (phoneDragHandler.phoneDragLocked) [phoneDragHandler touchesCancelled:touches withEvent:event];
 #endif
     [touchHandler touchesCancelled:touches withEvent:event];
@@ -2018,15 +2064,23 @@ static CGFloat previousRollAngle = 0;
         return false;
     }
     
+#if !TARGET_OS_TV
+    if (phoneDesktopInput) {
+        // Return follows any text still on its way to the desktop.
+        dispatch_async(phoneKeyQueue, ^{
+            LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
+            usleep(30 * 1000);
+            LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
+        });
+        [self resetPhoneTypedText];
+        if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
+        [self setPhoneKeyboardVisible:NO];
+        return NO;
+    }
+#endif
     LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
     usleep(50 * 1000);
     LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
-#if !TARGET_OS_TV
-    if (phoneDesktopInput) {
-        if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
-        [self setPhoneKeyboardVisible:NO];
-    }
-#endif
     return NO;
 }
 
@@ -2065,6 +2119,10 @@ static CGFloat previousRollAngle = 0;
 #if TARGET_OS_TV
     return;
 #else
+    if (phoneDesktopInput) {
+        [self phoneTextChanged:textField];
+        return;
+    }
 
     NSString* inputText = textField.text;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
@@ -2249,6 +2307,8 @@ static CGFloat previousRollAngle = 0;
 - (void)cancelPhoneTouches {
 #if !TARGET_OS_TV
     phoneTypingFinger=nil;
+    ++phoneHoldGeneration;
+    [self finishPhoneEdge:3 travel:0 y:0];
     if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
     if (phoneTouchIDs.count) LiSendTouchEvent(LI_TOUCH_EVENT_CANCEL_ALL, 0, 0, 0, 0, 0, 0, 0);
     [phoneTouchIDs removeAllObjects];
@@ -2262,6 +2322,171 @@ static CGFloat previousRollAngle = 0;
 }
 
 #if !TARGET_OS_TV
+// A finger that starts in the strip beside either screen edge is held back
+// from the desktop: an inward swipe becomes Back or Next app, a plain tap is
+// delivered afterwards, anything else is dropped.
+- (BOOL)handlePhoneEdgeTouch:(UITouch *)touch event:(UIEvent *)event type:(uint8_t)type video:(CGRect)video {
+    if (type == LI_TOUCH_EVENT_DOWN) {
+        if (phoneEdgeFinger || !self.phoneEdgeEvent || event.allTouches.count != 1 || phoneTouchIDs.count) return NO;
+        CGPoint start = [touch locationInView:self];
+        PhoneEdge edge = PhoneEdgeAt(start.x, CGRectGetWidth(self.bounds), 12);
+        if (edge == PhoneEdgeNone) return NO;
+        phoneEdgeFinger = touch; phoneEdge = edge; phoneEdgeStart = start; phoneEdgeBegan = event.timestamp;
+        self.phoneEdgeEvent(edge, 0, 0, start.y);
+        return YES;
+    }
+    if (touch != phoneEdgeFinger) return NO;
+    CGPoint point = [touch locationInView:self];
+    CGFloat dx = point.x - phoneEdgeStart.x, dy = point.y - phoneEdgeStart.y;
+    if (type == LI_TOUCH_EVENT_MOVE) {
+        if (self.phoneEdgeEvent) self.phoneEdgeEvent(phoneEdge, 1, PhoneEdgeTravel(phoneEdge, dx), point.y);
+        return YES;
+    }
+    if (PhoneEdgeSwiped(phoneEdge, dx, dy, 64)) {
+        [self finishPhoneEdge:2 travel:PhoneEdgeTravel(phoneEdge, dx) y:point.y];
+    } else {
+        BOOL tapped = PhoneEdgeTapped(dx, dy, event.timestamp - phoneEdgeBegan);
+        CGPoint start = phoneEdgeStart;
+        [self finishPhoneEdge:3 travel:0 y:point.y];
+        if (tapped && video.size.width > 0 && video.size.height > 0) {
+            // The desktop still gets an ordinary tap on anything at the edge.
+            float x = fminf(1, fmaxf(0, (start.x - video.origin.x) / video.size.width));
+            float y = fminf(1, fmaxf(0, (start.y - video.origin.y) / video.size.height));
+            LiSendTouchEvent(LI_TOUCH_EVENT_DOWN, 9, x, y, 0.5f, 0, 0, 0);
+            LiSendTouchEvent(LI_TOUCH_EVENT_UP, 9, x, y, 0, 0, 0, 0);
+        }
+    }
+    return YES;
+}
+
+- (void)finishPhoneEdge:(NSInteger)phase travel:(CGFloat)travel y:(CGFloat)y {
+    if (!phoneEdgeFinger) return;
+    PhoneEdge edge = phoneEdge;
+    phoneEdgeFinger = nil; phoneEdge = PhoneEdgeNone;
+    if (self.phoneEdgeEvent) self.phoneEdgeEvent(edge, phase, travel, y);
+}
+
+// Desktop apps open a context menu after half a second of holding still; a
+// tap on the glass says the hold registered, as it does on the phone itself.
+- (void)armPhoneHoldHaptic {
+    NSUInteger generation = ++phoneHoldGeneration;
+    UITouch *finger = phoneTypingFinger;
+    if (!finger) return;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        StreamView *view = weakSelf;
+        if (!view || view->phoneHoldGeneration != generation || view->phoneTypingFinger != finger ||
+            view->phoneTypingMoved || view->phoneEdgeFinger == finger || view.phoneWindowControlActive) return;
+        [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
+    });
+}
+
+- (void)applyPhoneKeyboardTraits {
+    BOOL plain = phonePlainKeyboard;
+    keyInputField.autocorrectionType = plain ? UITextAutocorrectionTypeNo : UITextAutocorrectionTypeYes;
+    keyInputField.autocapitalizationType = plain ? UITextAutocapitalizationTypeNone : UITextAutocapitalizationTypeSentences;
+    keyInputField.spellCheckingType = plain ? UITextSpellCheckingTypeNo : UITextSpellCheckingTypeYes;
+    // Straight quotes and plain hyphens: prompts and code want them as typed.
+    keyInputField.smartQuotesType = UITextSmartQuotesTypeNo;
+    keyInputField.smartDashesType = UITextSmartDashesTypeNo;
+    keyInputField.smartInsertDeleteType = UITextSmartInsertDeleteTypeNo;
+}
+
+- (void)setPhoneKeyboardPlain:(BOOL)plain {
+    if (!phoneDesktopInput || phonePlainKeyboard == plain) return;
+    phonePlainKeyboard = plain;
+    [self applyPhoneKeyboardTraits];
+    [self resetPhoneTypedText];
+    if (keyInputField.isFirstResponder) [keyInputField reloadInputViews];
+}
+
+- (void)resetPhoneTypedText {
+    if (!phoneDesktopInput) return;
+    phoneTyped = @"";
+    if (!keyInputField.isFirstResponder || [keyInputField.text isEqualToString:KeyboardInputSentinel]) return;
+    if (keyInputField.markedTextRange) [keyInputField unmarkText];
+    keyInputField.text = KeyboardInputSentinel;
+    UITextPosition *end = keyInputField.endOfDocument;
+    keyInputField.selectedTextRange = [keyInputField textRangeFromPosition:end toPosition:end];
+}
+
+// The iPhone keyboard owns a running copy of the text, so autocorrect,
+// predictions, slide typing and dictation can rewrite it. Each change is sent
+// to the desktop as "remove N characters, then type this".
+- (void)phoneTextChanged:(UITextField *)textField {
+    NSString *text = textField.text ?: @"";
+    BOOL sentinel = [text hasPrefix:KeyboardInputSentinel];
+    NSString *now = sentinel ? [text substringFromIndex:KeyboardInputSentinel.length] : text;
+    NSString *before = phoneTyped ?: @"";
+    NSUInteger deletes = 0;
+    NSString *added = @"";
+    if (!sentinel && before.length == 0 && now.length == 0) {
+        // Backspace with nothing typed here deletes on the desktop.
+        deletes = 1;
+    } else {
+        NSUInteger beforeLength = before.length, nowLength = now.length;
+        unichar *a = malloc(sizeof(unichar) * (beforeLength + 1)), *b = malloc(sizeof(unichar) * (nowLength + 1));
+        [before getCharacters:a range:NSMakeRange(0, beforeLength)];
+        [now getCharacters:b range:NSMakeRange(0, nowLength)];
+        PhoneTextEdit edit = PhoneTextDiff(a, beforeLength, b, nowLength);
+        free(a); free(b);
+        deletes = edit.deletes;
+        added = [now substringFromIndex:edit.prefix];
+    }
+    phoneTyped = now;
+    if (!sentinel || now.length > 600) {
+        // Restore the marker that makes an empty field's Backspace visible,
+        // and keep the local copy from growing without bound.
+        if (now.length > 600) { phoneTyped = @""; now = @""; }
+        textField.text = [KeyboardInputSentinel stringByAppendingString:now];
+        UITextPosition *end = textField.endOfDocument;
+        textField.selectedTextRange = [textField textRangeFromPosition:end toPosition:end];
+    }
+    if (deletes || added.length) [self phoneSendDeletes:deletes text:added];
+}
+
+- (void)phoneSendDeletes:(NSUInteger)deletes text:(NSString *)text {
+    BOOL (^sender)(NSUInteger, NSString *) = self.phoneTextSender;
+    dispatch_async(phoneKeyQueue, ^{
+        // Short requests keep each one well inside the host's typing time.
+        NSUInteger offset = 0, remaining = deletes;
+        BOOL sent = sender != nil;
+        while (sent && (remaining || offset < text.length)) {
+            NSUInteger length = MIN(text.length - offset, 300);
+            if (offset + length < text.length)
+                length = NSMaxRange([text rangeOfComposedCharacterSequenceAtIndex:offset + length - 1]) - offset;
+            sent = sender(remaining, [text substringWithRange:NSMakeRange(offset, length)]);
+            if (sent) { remaining = 0; offset += length; }
+        }
+        if (sent) return;
+        // Without the paired host channel: key events, then UTF-8 text for
+        // anything that has no key.
+        NSString *rest = [text substringFromIndex:offset];
+        for (NSUInteger i = 0; i < remaining; i++) {
+            LiSendKeyboardEvent(0x08, KEY_ACTION_DOWN, 0);
+            usleep(8 * 1000);
+            LiSendKeyboardEvent(0x08, KEY_ACTION_UP, 0);
+            usleep(4 * 1000);
+        }
+        for (NSUInteger i = 0; i < rest.length; i++) {
+            if ([KeyboardSupport translateKeyEvent:[rest characterAtIndex:i] withModifierFlags:0].keycode == 0) {
+                const char *utf8 = rest.UTF8String;
+                LiSendUtf8TextEvent(utf8, (int)strlen(utf8));
+                return;
+            }
+        }
+        for (NSUInteger i = 0; i < rest.length; i++) {
+            struct KeyEvent event = [KeyboardSupport translateKeyEvent:[rest characterAtIndex:i] withModifierFlags:0];
+            if (event.modifier != 0) LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_DOWN, event.modifier);
+            LiSendKeyboardEvent2(event.keycode, KEY_ACTION_DOWN, event.modifier, SS_KBE_FLAG_NON_NORMALIZED);
+            usleep(8 * 1000);
+            LiSendKeyboardEvent2(event.keycode, KEY_ACTION_UP, event.modifier, SS_KBE_FLAG_NON_NORMALIZED);
+            if (event.modifier != 0) LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_UP, event.modifier);
+            usleep(4 * 1000);
+        }
+    });
+}
+
 - (BOOL)sendPhoneTouches:(NSSet<UITouch *> *)touches event:(UIEvent *)event type:(uint8_t)type {
     if (!phoneDesktopInput || (touchMode != TouchModeNative && touchMode != TouchModeNativeOnly) ||
         ((UITouch *)touches.anyObject).type != UITouchTypeDirect) return NO;
@@ -2278,6 +2503,7 @@ static CGFloat previousRollAngle = 0;
     if (video.size.width <= 0 || video.size.height <= 0) return YES;
     for (UITouch *touch in touches) {
         if (touch.type != UITouchTypeDirect) continue;
+        if ([self handlePhoneEdgeTouch:touch event:event type:type video:video]) continue;
         NSValue *key = [NSValue valueWithNonretainedObject:touch];
         NSNumber *pointer = phoneTouchIDs[key];
         if (type == LI_TOUCH_EVENT_DOWN && !pointer) {
@@ -2287,12 +2513,18 @@ static CGFloat previousRollAngle = 0;
             if (pointer) phoneTouchIDs[key] = pointer;
         }
         if (!pointer) continue;
-        CGPoint point = [touch locationInView:self];
-        float x = fminf(1, fmaxf(0, (point.x - video.origin.x) / video.size.width));
-        float y = fminf(1, fmaxf(0, (point.y - video.origin.y) / video.size.height));
-        // UIKit calls stay on the main thread; the transport queues immutable events.
-        LiSendTouchEvent(type, pointer.unsignedIntValue, x, y,
-            type == LI_TOUCH_EVENT_UP ? 0 : 0.5f, 0, 0, 0);
+        // The panel samples faster than UIKit delivers events. Forward every
+        // sample of a move so drags and scrolls follow the finger's real path.
+        NSArray<UITouch *> *samples = type == LI_TOUCH_EVENT_MOVE ? [event coalescedTouchesForTouch:touch] : nil;
+        if (!samples.count) samples = @[touch];
+        for (UITouch *sample in samples) {
+            CGPoint point = [sample locationInView:self];
+            float x = fminf(1, fmaxf(0, (point.x - video.origin.x) / video.size.width));
+            float y = fminf(1, fmaxf(0, (point.y - video.origin.y) / video.size.height));
+            // UIKit calls stay on the main thread; the transport queues immutable events.
+            LiSendTouchEvent(type, pointer.unsignedIntValue, x, y,
+                type == LI_TOUCH_EVENT_UP ? 0 : 0.5f, 0, 0, 0);
+        }
         if (type == LI_TOUCH_EVENT_UP) [phoneTouchIDs removeObjectForKey:key];
     }
     if (type == LI_TOUCH_EVENT_DOWN) [self startInteractionTimer];

@@ -26,6 +26,8 @@ jobs:
           /tmp/phone-drag-test
           cc -std=c11 -Wall -Wextra -Werror tests/phone_toolbar_reveal_test.c -o /tmp/phone-toolbar-test
           /tmp/phone-toolbar-test
+          cc -std=c11 -Wall -Wextra -Werror tests/phone_text_edit_test.c -o /tmp/phone-text-test
+          /tmp/phone-text-test
       - name: Build unsigned iPhone application
         shell: bash
         run: |

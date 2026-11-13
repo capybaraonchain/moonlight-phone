@@ -487,8 +487,31 @@ import VideoToolbox
         _ = currentScreen
     }
 
+    /// One-time upgrade for iPhones set up before 120 Hz phone streaming: the
+    /// host desktop follows the requested rate, so a ProMotion panel can show
+    /// every frame. The choice stays editable in Stream settings afterwards.
+    private static func applyPhoneProMotionUpgrade() {
+        let marker = "phoneProMotionUpgradeApplied"
+        guard isIPhone, !UserDefaults.standard.bool(forKey: marker) else { return }
+        UserDefaults.standard.set(true, forKey: marker)
+        guard UIScreen.main.maximumFramesPerSecond > 110 else { return }
+        let dataManager = DataManager()
+        guard let settings = dataManager.retrieveSettings(),
+              (settings.framerate as NSNumber?)?.intValue == 60 else { return }
+        settings.framerate = 120
+        // Same curve as the settings screen: bitrate grows with the square
+        // root of the frame rate above 60 FPS.
+        let current = Double((settings.bitrate as NSNumber?)?.intValue ?? 0)
+        if current > 0 {
+            let scaled = (current * 2.0.squareRoot() / 1000).rounded() * 1000
+            settings.bitrate = NSNumber(value: Int(min(scaled, 100_000)))
+        }
+        dataManager.saveDataSynchronously()
+    }
+
     @objc(changeDefaultSettingsForView:)
     public static func changeDefaultSettings(for view: UIView?) {
+        applyPhoneProMotionUpgrade()
         guard GenericUtils.needUpdateDefaultSettings() else {
             NSLog("[Settings startup] changeDefaultSettings skipped by upgrade marker")
             return
@@ -527,7 +550,7 @@ import VideoToolbox
             let nativeSize = phoneStreamSize(UIScreen.main.nativeBounds.size)
             settings.width = NSNumber(value: Int(nativeSize.width))
             settings.height = NSNumber(value: Int(nativeSize.height))
-            settings.framerate = 60
+            settings.framerate = maximumFPS > 110 ? 120 : 60
             settings.touchMode = NSNumber(value: TouchMode.absolute.rawValue)
             settings.showKeyboardToolbar = true
             settings.keyboardToggleFingers = 3

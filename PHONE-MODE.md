@@ -90,3 +90,51 @@ locally on the host over the existing paired TLS connection and expose only a
 boolean; text and field values are never read. Unsupported accessibility falls
 back to Type. Electron/Chrome need accessibility enabled; configured launchers
 use --force-renderer-accessibility on their next launch.
+
+### Touch-native update (build 18)
+
+**Frame rate.** iPhones with a 120 Hz panel now ask for 120 FPS (a one-time
+upgrade for existing installs; change it under More → Stream settings). The
+host desktop follows the requested rate. The picture is also placed on whole
+device pixels, and every touch sample of a drag or scroll is forwarded.
+
+**Typing.** The iPhone keyboard keeps a running copy of what you type, so
+autocorrect, predictions, slide typing and dictation work. Each change goes to
+the desktop over the paired channel as "remove N characters, then type this",
+and the host types it through its own virtual keyboard. That makes the result
+independent of the desktop keyboard layout: accents, `¿ ¡ ñ`, and symbols
+arrive as typed in every app, including Chromium/Electron apps. Terminals and
+password fields get a keyboard without autocorrect or capitalisation; tapping
+inside a terminal opens it. When a field near the bottom is tapped, the
+picture rises just enough to keep it above the keyboard. Without the host
+service the app falls back to plain key events.
+
+Known limit: Chromium-based apps cannot receive characters beyond the Basic
+Multilingual Plane (most emoji) from a keyboard; GTK apps and terminals can.
+
+**Gestures.** Swipe in from the left edge for Back (Alt+Left) and from the
+right edge for the previous app (Super+Tab). A chip follows the finger and
+turns blue once the swipe is long enough; lifting earlier does nothing, and a
+plain tap at the edge still reaches the desktop. The bottom edge is untouched:
+the iOS home indicator still leaves the app and switches iPhone apps, and the
+upward swipe plus **Show controls** still reveals the toolbar. Stream settings
+moved from the edge swipe to More. While the toolbar is hidden the desktop
+gives its rows back to maximized apps.
+
+**Clipboard.** More → **Paste from iPhone** copies the iPhone clipboard text to
+the desktop and pastes it (Ctrl+Shift+V in terminals). More → **Copy desktop
+clipboard to iPhone** does the reverse. Text copied on the desktop during a
+stream is also placed on the iPhone clipboard when you leave the app, ready to
+paste elsewhere. Only text is transferred, up to 256 KB, only while the phone
+display lease is active, and clipboard entries flagged as passwords by a
+password manager are never sent. iOS asks before the app reads the iPhone
+clipboard; Settings → Moonlight Phone → Paste from Other Apps → Allow removes
+the prompt.
+
+**Haptics.** A tap confirms a half-second hold (context menus), picking up and
+dropping a dragged item, an edge swipe arming, and a window hitting its
+minimum size.
+
+The host service gains `text`, `context`, `clipboard` and `chrome` actions on
+the same paired mutual-TLS port. It still performs no mouse emulation or output
+management and logs no request bodies.

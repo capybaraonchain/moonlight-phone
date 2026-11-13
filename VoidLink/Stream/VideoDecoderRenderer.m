@@ -149,9 +149,16 @@ extern int ff_isom_write_av1c(AVIOContext *pb, const uint8_t *buf, int size,
         videoSize = CGSizeMake(_view.bounds.size.width, _view.bounds.size.width / aspectRatioToUse);
     }
 
+    // Keep the picture on whole device pixels. A 1176 px stream centred on a
+    // 1179 px panel would otherwise begin 1.5 px in and blur every column.
+    CGFloat pixel = _view.window.screen.scale > 0 ? _view.window.screen.scale : UIScreen.mainScreen.scale;
+    videoSize = CGSizeMake(round(videoSize.width * pixel) / pixel, round(videoSize.height * pixel) / pixel);
+    CGFloat originX = floor((CGRectGetWidth(_view.bounds) - videoSize.width) / 2 * pixel) / pixel;
+    CGFloat originY = floor((CGRectGetHeight(_view.bounds) - videoSize.height) / 2 * pixel) / pixel;
+
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    _displayLayer.position = CGPointMake(CGRectGetMidX(_view.bounds), CGRectGetMidY(_view.bounds));
+    _displayLayer.position = CGPointMake(originX + videoSize.width / 2, originY + videoSize.height / 2);
     _displayLayer.bounds = CGRectMake(0, 0, videoSize.width, videoSize.height);
     [CATransaction commit];
 }

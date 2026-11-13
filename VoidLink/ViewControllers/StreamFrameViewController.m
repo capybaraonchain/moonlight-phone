@@ -145,6 +145,13 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     NSUInteger _phoneWindowSequence, _phoneWindowGeneration;
     BOOL _phoneWindowBusy, _phoneWindowLimitShown;
     BOOL _phoneWindowSettingsGesture, _phoneWindowToolboxGesture;
+    HttpManager *_phoneTextHTTP;
+    CFTimeInterval _phoneTextRetryAfter;
+    UIView *_phoneEdgeIndicator;
+    UIImageView *_phoneEdgeIcon;
+    BOOL _phoneEdgeArmed;
+    NSString *_phoneClipboardHash;
+    NSString *_phoneToolbarReported;
 #endif
     CGPoint _appliedRestingOffset; // last portrait stream position applied at 1x
     uint16_t overlayLevel;
@@ -416,6 +423,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         [_slideToSettingsRecognizer requireGestureRecognizerToFail:_phoneRevealPan];
         [_slideToToolboxRecognizer requireGestureRecognizerToFail:_phoneRevealPan];
     }
+    [self reservePhoneEdgesForDesktop];
     
     /*
     if([self isOnScreenWidgetEnabled]){
@@ -1282,6 +1290,158 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     _phoneRevealPan.enabled = !_phoneRevealZone.hidden;
     _phoneRevealButton.hidden = _phoneToolbarReveal.phase != PhoneToolbarPrompt;
     [self layoutPhoneToolbarReveal];
+    [self reportPhoneToolbarState];
+}
+
+- (BOOL)isPhoneDesktop {
+    return PublicUtils.isIPhone && [self.streamConfig.appName isEqualToString:@"Desktop"];
+}
+
+- (HttpManager *)newPhoneHostChannel {
+    return [[HttpManager alloc] initWithAddress:self.streamConfig.host
+        httpsPort:self.streamConfig.httpsPort serverCert:self.streamConfig.serverCert];
+}
+
+- (void)phoneImpact:(UIImpactFeedbackStyle)style {
+    [[[UIImpactFeedbackGenerator alloc] initWithStyle:style] impactOccurred];
+}
+
+// The screen edges belong to the desktop gestures here (Back and previous
+// app); stream settings stay under More.
+- (void)reservePhoneEdgesForDesktop {
+    if (![self isPhoneDesktop]) return;
+    _slideToSettingsRecognizer.enabled = NO;
+    _slideToToolboxRecognizer.enabled = NO;
+}
+
+// With the toolbar hidden the desktop only needs to keep clear of the home
+// indicator, so maximized apps get the freed rows back.
+- (void)reportPhoneToolbarState {
+    if (![self isPhoneDesktop] || !_phoneStreamReady || _phoneReconnecting || _phoneClosing) return;
+    NSString *state = _phoneToolbarReveal.phase == PhoneToolbarVisible ? @"visible" : @"hidden";
+    if ([state isEqualToString:_phoneToolbarReported]) return;
+    _phoneToolbarReported = state;
+    HttpManager *manager = [self newPhoneHostChannel];
+    __weak typeof(self) weakSelf = self;
+    [manager phoneWindowRequest:@{@"action":@"chrome", @"toolbar":state} completion:^(NSDictionary *result, NSError *error) {
+        [manager closePhoneWindowSession];
+        typeof(self) self = weakSelf;
+        // Not applied: report again at the next change instead of assuming.
+        if (self && error && [self->_phoneToolbarReported isEqualToString:state]) self->_phoneToolbarReported = nil;
+    }];
+}
+
+// Left edge: Back. Right edge: the previous app. A chip follows the finger
+// and fills in once the swipe is long enough to count.
+- (void)phoneEdge:(NSInteger)edge phase:(NSInteger)phase travel:(CGFloat)travel y:(CGFloat)y {
+    if (!_phoneEdgeIndicator) {
+        _phoneEdgeIndicator = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
+        _phoneEdgeIndicator.layer.cornerRadius = 22;
+        _phoneEdgeIndicator.userInteractionEnabled = NO;
+        _phoneEdgeIndicator.alpha = 0;
+        _phoneEdgeIcon = [[UIImageView alloc] initWithFrame:CGRectInset(_phoneEdgeIndicator.bounds, 12, 12)];
+        _phoneEdgeIcon.contentMode = UIViewContentModeScaleAspectFit;
+        _phoneEdgeIcon.tintColor = UIColor.whiteColor;
+        [_phoneEdgeIndicator addSubview:_phoneEdgeIcon];
+        [self.view addSubview:_phoneEdgeIndicator];
+    }
+    if (phase == 0) {
+        if (@available(iOS 13.0, *)) {
+            _phoneEdgeIcon.image = [UIImage systemImageNamed:edge == 1 ? @"chevron.left" : @"square.on.square"];
+        }
+        _phoneEdgeArmed = NO;
+        [_phoneEdgeIndicator.layer removeAllAnimations];
+        [self.view bringSubviewToFront:_phoneEdgeIndicator];
+    }
+    if (phase <= 1) {
+        CGFloat pull = MAX(0, MIN(travel, 64));
+        BOOL armed = travel >= 64;
+        CGFloat height = [_streamView convertPoint:CGPointMake(0, y) toView:self.view].y;
+        _phoneEdgeIndicator.center = CGPointMake(edge == 1 ? pull - 14 : CGRectGetWidth(self.view.bounds) - pull + 14, height);
+        _phoneEdgeIndicator.alpha = MIN(1, pull / 32);
+        _phoneEdgeIndicator.backgroundColor = armed ? UIColor.systemBlueColor : [UIColor colorWithWhite:0.15 alpha:0.92];
+        if (armed != _phoneEdgeArmed) {
+            _phoneEdgeArmed = armed;
+            [self phoneImpact:armed ? UIImpactFeedbackStyleMedium : UIImpactFeedbackStyleLight];
+        }
+        return;
+    }
+    UIView *chip = _phoneEdgeIndicator;
+    [UIView animateWithDuration:0.18 animations:^{ chip.alpha = 0; }];
+    if (phase != 2 || !_phoneStreamReady || _phoneReconnecting || _phoneClosing) return;
+    [self sendPhoneCommand:edge == 1 ? @"ALT+LEFT_ARROW" : @"WIN+TAB"];
+}
+
+// Remember what the desktop clipboard held when the stream began, so only
+// something copied there during this session follows you off the stream.
+- (void)phoneClipboardBaseline {
+    if (![self isPhoneDesktop]) return;
+    _phoneClipboardHash = nil;
+    HttpManager *manager = [self newPhoneHostChannel];
+    __weak typeof(self) weakSelf = self;
+    [manager phoneWindowRequest:@{@"action":@"clipboard", @"op":@"hash"} completion:^(NSDictionary *result, NSError *error) {
+        [manager closePhoneWindowSession];
+        typeof(self) self = weakSelf;
+        if (!self || error) return;
+        self->_phoneClipboardHash = [result[@"hash"] isKindOfClass:NSString.class] ? result[@"hash"] : @"";
+    }];
+}
+
+// Desktop clipboard text -> iPhone clipboard. Asked for from More, or done
+// quietly when leaving the stream if the desktop clipboard changed meanwhile.
+- (void)phoneCopyFromDesktop:(BOOL)asked {
+    if (![self isPhoneDesktop] || !_phoneStreamReady || (!asked && !_phoneClipboardHash)) return;
+    HttpManager *manager = [self newPhoneHostChannel];
+    NSMutableDictionary *request = [@{@"action":@"clipboard", @"op":@"get"} mutableCopy];
+    if (!asked) request[@"known"] = _phoneClipboardHash;
+    UIApplication *app = [UIApplication sharedApplication];
+    __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
+    if (!asked) task = [app beginBackgroundTaskWithExpirationHandler:^{
+        if (task != UIBackgroundTaskInvalid) { [app endBackgroundTask:task]; task = UIBackgroundTaskInvalid; }
+    }];
+    __weak typeof(self) weakSelf = self;
+    [manager phoneWindowRequest:request completion:^(NSDictionary *result, NSError *error) {
+        [manager closePhoneWindowSession];
+        typeof(self) self = weakSelf;
+        if (self && !error) {
+            if ([result[@"hash"] isKindOfClass:NSString.class]) self->_phoneClipboardHash = result[@"hash"];
+            NSString *text = [result[@"text"] isKindOfClass:NSString.class] ? result[@"text"] : nil;
+            if (text.length) {
+                UIPasteboard.generalPasteboard.string = text;
+                if (asked) {
+                    [self phoneImpact:UIImpactFeedbackStyleLight];
+                    [self updateTransientHUDText:@"Copied to iPhone"];
+                }
+            } else if (asked) [self updateTransientHUDText:@"The desktop clipboard has no text."];
+        } else if (self && asked) [self updateTransientHUDText:error.localizedDescription];
+        if (task != UIBackgroundTaskInvalid) { [app endBackgroundTask:task]; task = UIBackgroundTaskInvalid; }
+    }];
+}
+
+// iPhone clipboard text -> desktop clipboard, then paste into the focused app.
+- (void)phonePasteFromPhone {
+    NSString *text = UIPasteboard.generalPasteboard.string;
+    if (!text.length) {
+        [self updateTransientHUDText:@"The iPhone clipboard has no text to paste."];
+        return;
+    }
+    HttpManager *manager = [self newPhoneHostChannel];
+    __weak typeof(self) weakSelf = self;
+    [manager phoneWindowRequest:@{@"action":@"clipboard", @"op":@"set", @"text":text} completion:^(NSDictionary *result, NSError *error) {
+        [manager closePhoneWindowSession];
+        typeof(self) self = weakSelf;
+        if (!self) return;
+        if (error) {
+            [self updateTransientHUDText:error.localizedDescription];
+            return;
+        }
+        // This text came from the phone: no need to copy it back on leaving.
+        if ([result[@"hash"] isKindOfClass:NSString.class]) self->_phoneClipboardHash = result[@"hash"];
+        [self->_streamView resetPhoneTypedText];
+        [self sendPhoneCommand:[result[@"terminal"] boolValue] ? @"CTRL+SHIFT+V" : @"CTRL+V"];
+        [self phoneImpact:UIImpactFeedbackStyleLight];
+        [self updateTransientHUDText:@"Pasted from iPhone"];
+    }];
 }
 
 - (void)cancelPhoneToolbarReveal {
@@ -1415,6 +1575,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                 self->_phoneWindowSent = actual;
                 if ([result[@"limited"] boolValue] && !self->_phoneWindowLimitShown) {
                     self->_phoneWindowLimitShown = YES;
+                    [[[UINotificationFeedbackGenerator alloc] init] notificationOccurred:UINotificationFeedbackTypeWarning];
                     [self updateTransientHUDText:@"This app has reached its minimum size. Roomy layout gives it more space."];
                 }
             }
@@ -1450,6 +1611,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     BOOL adjusting = _phoneWindowMode != nil;
     NSInteger state = (holding ? 2 : locked ? 1 : 0) + (adjusting ? 3 : 0);
     if (!_phoneDragButton || _phoneDragUIState == state) return;
+    // Picking an item up and letting it go are felt, as on the phone itself.
+    if (_phoneDragUIState >= 0 && holding != (_phoneDragUIState % 3 == 2))
+        [self phoneImpact:holding ? UIImpactFeedbackStyleHeavy : UIImpactFeedbackStyleLight];
     _phoneDragUIState = state;
     NSString *title = holding ? @"Drop" : locked ? @"Pick" : @"Drag";
     _phoneDragButton.selected = locked;
@@ -1495,7 +1659,18 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             [self sendPhoneCommand:_streamView.phoneDragLocked ? @"WIN+TAB" : @"WIN+ALT+CTRL+A"];
             if (_streamView.phoneDragLocked) [self updateTransientHUDText:@"Drag held · Apps switches to the next app · Drop releases"];
             break;
-        case 3: [_streamView toggleSoftKeyboardFromButton]; break;
+        case 3: {
+            // Terminals get a keyboard without autocorrect; other apps the full one.
+            HttpManager *manager = [self newPhoneHostChannel];
+            __weak StreamFrameViewController *weakSelf = self;
+            [manager phoneWindowRequest:@{@"action":@"context"} completion:^(NSDictionary *result, NSError *error) {
+                [manager closePhoneWindowSession];
+                StreamFrameViewController *vc = weakSelf;
+                if (vc && !error) [vc->_streamView setPhoneKeyboardPlain:[result[@"plain"] boolValue]];
+            }];
+            [_streamView toggleSoftKeyboardFromButton];
+            break;
+        }
         case 4: {
             BOOL enable = !_streamView.phoneDragLocked;
             [_streamView configurePhoneDragLock:enable];
@@ -1507,13 +1682,16 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
             UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Your desktop"
                 message:@"Move or resize the selected window with your finger. Choose a layout for more room or larger text."
                 preferredStyle:UIAlertControllerStyleActionSheet];
-            NSArray *titles = @[@"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Keyboard shortcuts", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Move window", @"Disconnect"];
+            NSArray *titles = @[@"Paste from iPhone", @"Copy desktop clipboard to iPhone", @"Roomy layout", @"Comfort layout", @"Large text", @"Agent desktops", @"Keyboard shortcuts", @"Zoom & pan", @"Fit screen", @"Stream settings", @"Move window", @"Disconnect"];
             NSArray *commands = @[@"WIN+ALT+CTRL+1", @"WIN+ALT+CTRL+2", @"WIN+ALT+CTRL+3", @"WIN+ALT+CTRL+G"];
             __weak StreamFrameViewController *weakSelf = self;
-            for (NSInteger i = 0; i < titles.count; i++) {
-                [menu addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            for (NSInteger item = 0; item < titles.count; item++) {
+                [menu addAction:[UIAlertAction actionWithTitle:titles[item] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
                     StreamFrameViewController *vc = weakSelf;
                     if (!vc) return;
+                    if (item == 0) { [vc phonePasteFromPhone]; return; }
+                    if (item == 1) { [vc phoneCopyFromDesktop:YES]; return; }
+                    NSInteger i = item - 2;
                     if (i < commands.count) [vc sendPhoneCommand:commands[i]];
                     else if (i == 4) {
                         // Present after the action sheet finishes dismissing.
@@ -1721,6 +1899,30 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     ]];
     [self updatePhoneToolbarVisibility];
     __weak typeof(self) weakSelf = self;
+    [self reservePhoneEdgesForDesktop];
+    _streamView.phoneEdgeEvent = ^(NSInteger edge, NSInteger phase, CGFloat travel, CGFloat y) {
+        [weakSelf phoneEdge:edge phase:phase travel:travel y:y];
+    };
+    // The host types what the iPhone keyboard produced, whatever the desktop
+    // keyboard layout. One kept-open paired connection carries the edits.
+    _phoneTextHTTP = [self newPhoneHostChannel];
+    HttpManager *typing = _phoneTextHTTP;
+    _streamView.phoneTextSender = ^BOOL(NSUInteger deletes, NSString *text) {
+        StreamFrameViewController *vc = weakSelf;
+        if (!vc || CACurrentMediaTime() < vc->_phoneTextRetryAfter) return NO;
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        __block BOOL typed = NO, unreachable = NO;
+        [typing phoneWindowRequest:@{@"action":@"text", @"delete":@(deletes), @"text":text ?: @""}
+            completion:^(NSDictionary *result, NSError *error) {
+                typed = error == nil;
+                unreachable = error != nil && ![error.domain isEqualToString:@"PhoneWindow"];
+                dispatch_semaphore_signal(done);
+            }];
+        if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(6 * NSEC_PER_SEC))) != 0) unreachable = YES;
+        // A host that is not answering must not stall every keystroke.
+        if (unreachable) vc->_phoneTextRetryAfter = CACurrentMediaTime() + 20;
+        return typed;
+    };
     _streamView.phoneTextFocusEvent = ^(BOOL tap, CGPoint point) {
         typeof(self) self=weakSelf;
         if (!self) return;
@@ -1738,7 +1940,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
                 [manager closePhoneWindowSession];
                 typeof(self) current=weakSelf;
                 if (!current || error || current->_phoneFocusGeneration!=generation || !current->_phoneStreamReady || current->_phoneReconnecting || current->_phoneClosing) return;
-                [current->_streamView setPhoneKeyboardVisible:[result[@"editable"] boolValue]];
+                BOOL editable = [result[@"editable"] boolValue];
+                if (editable) [current->_streamView setPhoneKeyboardPlain:[result[@"plain"] boolValue]];
+                [current->_streamView setPhoneKeyboardVisible:editable];
             }];
         });
     };
@@ -2132,6 +2336,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     ++_phoneRotationGeneration;
     [_streamView cancelPhoneTouches];
     [self releasePhoneDrag];
+    [_phoneTextHTTP closePhoneWindowSession];
 #endif
     if (@available(iOS 13.0, *)) {
         // [ControllerNavigator setUINavigationDelegate:[_mainFrameViewcontroller isInAppView] ? _mainFrameViewcontroller : _mainFrameViewcontroller.hostCollectionVC];
@@ -2259,6 +2464,8 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 #if !TARGET_OS_TV
     [self releasePhoneDrag];
     [self cancelPhoneToolbarReveal];
+    // Something copied on the desktop is ready to paste in the next iPhone app.
+    [self phoneCopyFromDesktop:NO];
 #endif
     //[self.pipController startPictureInPicture];
     //sleep(1);
@@ -2447,6 +2654,9 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         [self->_phoneRotationCover removeFromSuperview];
         self->_phoneRotationCover = nil;
         [self requestPhoneRotationIfNeeded];
+        self->_phoneToolbarReported = nil;
+        [self reportPhoneToolbarState];
+        [self phoneClipboardBaseline];
 #endif
         
         if (self->_settings.statsOverlayEnabled) {
