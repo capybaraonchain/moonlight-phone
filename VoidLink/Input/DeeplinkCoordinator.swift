@@ -104,10 +104,21 @@ final class DeeplinkCoordinator: NSObject {
 
     @objc(canHandleURL:)
     static func canHandle(_ url: URL) -> Bool {
-        Target(url: url) != nil
+        isOmarchyURL(url) || Target(url: url) != nil
+    }
+
+    private static func isOmarchyURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "moonlightphone" && url.host?.lowercased() == "omarchy" &&
+        url.path.isEmpty && url.query == nil && url.fragment == nil && url.user == nil && url.password == nil && url.port == nil
     }
 
     func open(_ url: URL) {
+#if os(iOS)
+        if Self.isOmarchyURL(url) {
+            do { try Self.openOmarchyShortcut() } catch { showNotice(error.localizedDescription) }
+            return
+        }
+#endif
         guard let target = Target(url: url) else { return }
         reset()
         self.target = target
@@ -472,7 +483,7 @@ final class DeeplinkCoordinator: NSObject {
         deliverPendingShortcut()
     }
 
-    @MainActor @nonobjc fileprivate static func openOmarchyShortcut() throws {
+    @MainActor @nonobjc static func openOmarchyShortcut() throws {
         // Bringing an existing stream forward must never tear it down.
         if shortcutCoordinators.allObjects.contains(where: { $0.mainFrame?.isStreaming() == true }) { return }
         let desktops = ShortcutCatalog.availableEntries.filter { $0.appName?.caseInsensitiveCompare("Desktop") == .orderedSame }

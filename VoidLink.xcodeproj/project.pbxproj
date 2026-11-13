@@ -48,6 +48,8 @@
 		2B7A10022FFB000100000001 /* SettingsTouchVelocityPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7A10012FFB000100000001 /* SettingsTouchVelocityPreview.swift */; };
 		3A4A3A112F0C000100000001 /* ProfileSelectorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4A3A102F0C000100000001 /* ProfileSelectorViewController.swift */; };
 		3A4A3A132F0C000100000003 /* LayoutOnScreenControlsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4A3A122F0C000100000002 /* LayoutOnScreenControlsViewController.swift */; };
+		511E7C15DE35D32C20D23034 /* OpenOmarchyControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBCD79D9757BEA3DA77ACC1 /* OpenOmarchyControl.swift */; };
+		5B53D6EB6323E79AF88874A7 /* OmarchyWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = FB8480DF68FB332CE986CADF /* OmarchyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		840751B32BF49C050096B657 /* CustomTapGestureRecognizer.m in Sources */ = {isa = PBXBuildFile; fileRef = 840751B22BF49C050096B657 /* CustomTapGestureRecognizer.m */; platformFilter = ios; };
 		84203F232C5F24C00032EEED /* OnScreenWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84203F222C5F24C00032EEED /* OnScreenWidgetView.swift */; };
 		84351B0E2C29ACCB00A77989 /* LayoutOnScreenControls.m in Sources */ = {isa = PBXBuildFile; fileRef = 84351B072C29ACCA00A77989 /* LayoutOnScreenControls.m */; };
@@ -105,12 +107,14 @@
 		98CFB82F1CAD481B0048EF74 /* libmoonlight-common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 98AB2E841CAD46840089BB98 /* libmoonlight-common.a */; };
 		98D5856D1C0EA79600F6CC00 /* TemporaryHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856C1C0EA79600F6CC00 /* TemporaryHost.m */; };
 		98D585701C0ED0E800F6CC00 /* TemporarySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98D5856F1C0ED0E800F6CC00 /* TemporarySettings.swift */; };
+		9F2948BF0B653016E5DFB207 /* OmarchyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F5153CAE66524337B80B77 /* OmarchyWidgets.swift */; };
 		A1900E012F9A100100BA853A /* InputAccessoryBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1900E002F9A100100BA853A /* InputAccessoryBar.swift */; };
 		A1B2C3D42F90000100ABCDEF /* AbstractGamepadOverlayWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D32F90000100ABCDEF /* AbstractGamepadOverlayWidgetView.swift */; };
 		A1C0DE012FBC000100000001 /* ControllerNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE002FBC000100000001 /* ControllerNavigator.swift */; };
 		A1C0DE032FBC000100000001 /* RadialMenuOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE022FBC000100000001 /* RadialMenuOverlayView.swift */; };
 		A1D500022FFC000100000001 /* authored_haptics_engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1D500012FFC000100000001 /* authored_haptics_engine.cpp */; settings = {COMPILER_FLAGS = "-std=c++17"; }; };
 		A1F100012FFB000100000001 /* FrameInterpolator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F100002FFB000100000001 /* FrameInterpolator.swift */; };
+		A5C5C0B4A6C7E6C1724E81CF /* OpenOmarchyControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBCD79D9757BEA3DA77ACC1 /* OpenOmarchyControl.swift */; };
 		A5E771022FFF100100000002 /* SettingsSwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E771012FFF100100000001 /* SettingsSwiftUI.swift */; };
 		A5E771042FFF100100000004 /* SettingsControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E771032FFF100100000003 /* SettingsControls.swift */; };
 		A70100000000000000000001 /* SettingsSwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E771012FFF100100000001 /* SettingsSwiftUI.swift */; };
@@ -253,7 +257,14 @@
 		C0DE5A1E2F80000100000012 /* CursorInertia.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE5A1E2F80000100000011 /* CursorInertia.swift */; };
 		C0DE5A1E2F80000100000013 /* CursorInertia.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE5A1E2F80000100000011 /* CursorInertia.swift */; };
 		C0DE5A1E2F80000100000022 /* FloatingKeyboardButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE5A1E2F80000100000021 /* FloatingKeyboardButton.swift */; };
+		D33F11000000000000000002 /* DeeplinkCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000001 /* DeeplinkCoordinator.swift */; };
+		D33F11000000000000000003 /* DeeplinkCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000001 /* DeeplinkCoordinator.swift */; };
+		D33F11000000000000000005 /* TopShelfStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000004 /* TopShelfStore.swift */; };
+		D33F11000000000000000006 /* TopShelfStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000004 /* TopShelfStore.swift */; };
+		D33F11000000000000000009 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000007 /* ContentProvider.swift */; };
+		D33F11000000000000000011 /* VoidLinkTopShelf.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000008 /* VoidLinkTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DC1F5A07206436B20037755F /* ConnectionHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = DC1F5A06206436B20037755F /* ConnectionHelper.m */; };
+		EEE928529A9A42911FBC6350 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C55E76D2CBABAD28898B0D0E /* Foundation.framework */; };
 		F74BEF9C2C1A705600224667 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = F74BEF9B2C1A705600224667 /* OpenSSL */; };
 		FB1A674D2131E65900507771 /* KeyboardSupport.m in Sources */ = {isa = PBXBuildFile; fileRef = FB1A674C2131E65900507771 /* KeyboardSupport.m */; };
 		FB1D599A1BBCCD7E00F482CA /* AppCollectionView.m in Sources */ = {isa = PBXBuildFile; fileRef = FB1D59991BBCCD7E00F482CA /* AppCollectionView.m */; };
@@ -299,12 +310,6 @@
 		FBD3495019FF2174002D2A60 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBD3494F19FF2174002D2A60 /* SettingsViewController.swift */; };
 		FBD3495319FF36FB002D2A60 /* SWRevealViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = FBD3495219FF36FB002D2A60 /* SWRevealViewController.m */; };
 		FBD349621A0089F6002D2A60 /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBD349611A0089F6002D2A60 /* DataManager.swift */; };
-		D33F11000000000000000002 /* DeeplinkCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000001 /* DeeplinkCoordinator.swift */; };
-		D33F11000000000000000003 /* DeeplinkCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000001 /* DeeplinkCoordinator.swift */; };
-		D33F11000000000000000005 /* TopShelfStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000004 /* TopShelfStore.swift */; };
-		D33F11000000000000000006 /* TopShelfStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000004 /* TopShelfStore.swift */; };
-		D33F11000000000000000009 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000007 /* ContentProvider.swift */; };
-		D33F11000000000000000011 /* VoidLinkTopShelf.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D33F11000000000000000008 /* VoidLinkTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -329,12 +334,12 @@
 			remoteGlobalIDString = FB290E2D19B37A4E004C83CF;
 			remoteInfo = "moonlight-common";
 		};
-		FB1A68142132509400507771 /* PBXContainerItemProxy */ = {
+		B06E229D2DA003A9A9D6A8A5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = FB1A67EF21324EE300507771;
-			remoteInfo = "moonlight-common-tv";
+			containerPortal = FB290CE619B2C406004C83CF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D2637DCBDE2834420BFB66FF;
+			remoteInfo = OmarchyWidgets;
 		};
 		D33F11000000000000000012 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -343,9 +348,27 @@
 			remoteGlobalIDString = D33F1100000000000000000A;
 			remoteInfo = "VoidLink Top Shelf";
 		};
+		FB1A68142132509400507771 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98AB2E7F1CAD46830089BB98 /* moonlight-common.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = FB1A67EF21324EE300507771;
+			remoteInfo = "moonlight-common-tv";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		020F35F714FA1D4489CEB9AD /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5B53D6EB6323E79AF88874A7 /* OmarchyWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D33F1100000000000000000B /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -360,7 +383,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		D33F11000000000000000013 /* Deeplink.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Deeplink.xcconfig; sourceTree = "<group>"; };
 		180345E02E819877004AF36F /* libopus-sim.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = "libopus-sim.a"; sourceTree = "<group>"; };
 		180E6E362E93BFDB0067C73A /* AlertControllerUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertControllerUtil.swift; sourceTree = "<group>"; };
 		1817B61D2E6FD04D000D938D /* SafeTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeTimer.swift; sourceTree = "<group>"; };
@@ -388,6 +410,7 @@
 		18D43D802F050240008C326F /* PencilTipOffsetCalibrationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PencilTipOffsetCalibrationViewController.swift; sourceTree = "<group>"; };
 		18E4BCE92E891895000A8657 /* MotionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionHandler.swift; sourceTree = "<group>"; };
 		18FCADAE2ECAC23200787A96 /* PencilHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PencilHandler.swift; sourceTree = "<group>"; };
+		24F5153CAE66524337B80B77 /* OmarchyWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmarchyWidgets.swift; sourceTree = "<group>"; };
 		2A039E562F72892B00546768 /* VoidLinkPreview.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoidLinkPreview.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A263D492FF3B3F800154DEA /* PublicExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicExtensions.swift; sourceTree = "<group>"; };
 		2A263D4E2FF3BA2800154DEA /* PublicUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicUtils.swift; sourceTree = "<group>"; };
@@ -400,6 +423,7 @@
 		3A4A3A102F0C000100000001 /* ProfileSelectorViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSelectorViewController.swift; sourceTree = "<group>"; };
 		3A4A3A122F0C000100000002 /* LayoutOnScreenControlsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutOnScreenControlsViewController.swift; sourceTree = "<group>"; };
 		693B3A9A218638CD00982F7B /* Settings.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = Settings.bundle; sourceTree = "<group>"; };
+		7BBCD79D9757BEA3DA77ACC1 /* OpenOmarchyControl.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenOmarchyControl.swift; sourceTree = "<group>"; };
 		840751B12BF49B5A0096B657 /* CustomTapGestureRecognizer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CustomTapGestureRecognizer.h; sourceTree = "<group>"; };
 		840751B22BF49C050096B657 /* CustomTapGestureRecognizer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CustomTapGestureRecognizer.m; sourceTree = "<group>"; };
 		84203F222C5F24C00032EEED /* OnScreenWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnScreenWidgetView.swift; sourceTree = "<group>"; };
@@ -518,6 +542,12 @@
 		B76B00022FFCC00100000002 /* KishiV3ProXLRumbler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = KishiV3ProXLRumbler.swift; sourceTree = "<group>"; };
 		C0DE5A1E2F80000100000011 /* CursorInertia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorInertia.swift; sourceTree = "<group>"; };
 		C0DE5A1E2F80000100000021 /* FloatingKeyboardButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingKeyboardButton.swift; sourceTree = "<group>"; };
+		C55E76D2CBABAD28898B0D0E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		D33F11000000000000000001 /* DeeplinkCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeeplinkCoordinator.swift; sourceTree = "<group>"; };
+		D33F11000000000000000004 /* TopShelfStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TopShelfStore.swift; path = "VoidLink TV/Top Shelf/TopShelfStore.swift"; sourceTree = SOURCE_ROOT; };
+		D33F11000000000000000007 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ContentProvider.swift; path = "VoidLink TV/Top Shelf/ContentProvider.swift"; sourceTree = SOURCE_ROOT; };
+		D33F11000000000000000008 /* VoidLinkTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VoidLinkTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D33F11000000000000000013 /* Deeplink.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Deeplink.xcconfig; sourceTree = "<group>"; };
 		DC1F5A05206436B10037755F /* ConnectionHelper.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ConnectionHelper.h; sourceTree = "<group>"; };
 		DC1F5A06206436B20037755F /* ConnectionHelper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ConnectionHelper.m; sourceTree = "<group>"; };
 		FB1A674B2131E65900507771 /* KeyboardSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = KeyboardSupport.h; sourceTree = "<group>"; };
@@ -556,6 +586,7 @@
 		FB53E1421BE5DC4400CD6ECE /* IdManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = IdManager.m; sourceTree = "<group>"; };
 		FB6549541A57907E001C8F39 /* DiscoveryWorker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DiscoveryWorker.h; sourceTree = "<group>"; };
 		FB6549551A57907E001C8F39 /* DiscoveryWorker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DiscoveryWorker.m; sourceTree = "<group>"; };
+		FB8480DF68FB332CE986CADF /* OmarchyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = OmarchyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB89460519F646E200339C8A /* CryptoManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CryptoManager.h; sourceTree = "<group>"; };
 		FB89460619F646E200339C8A /* CryptoManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CryptoManager.m; sourceTree = "<group>"; };
 		FB89460719F646E200339C8A /* mkcert.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mkcert.c; sourceTree = "<group>"; };
@@ -610,21 +641,17 @@
 		FBD3495119FF36FB002D2A60 /* SWRevealViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SWRevealViewController.h; sourceTree = "<group>"; };
 		FBD3495219FF36FB002D2A60 /* SWRevealViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SWRevealViewController.m; sourceTree = "<group>"; };
 		FBD349611A0089F6002D2A60 /* DataManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = DataManager.swift; path = Database/DataManager.swift; sourceTree = "<group>"; };
-		D33F11000000000000000001 /* DeeplinkCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeeplinkCoordinator.swift; sourceTree = "<group>"; };
-		D33F11000000000000000004 /* TopShelfStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TopShelfStore.swift; path = "VoidLink TV/Top Shelf/TopShelfStore.swift"; sourceTree = SOURCE_ROOT; };
-		D33F11000000000000000007 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ContentProvider.swift; path = "VoidLink TV/Top Shelf/ContentProvider.swift"; sourceTree = SOURCE_ROOT; };
-		D33F11000000000000000008 /* VoidLinkTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = VoidLinkTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2A93D5662F7D016C00C2207F /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		2A93D5662F7D016C00C2207F /* Exceptions for "VoidLinkPreview" folder in "VoidLinkPreview" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				WidgetPickerViewController.swift,
 			);
 			target = 2A039E552F72892B00546768 /* VoidLinkPreview */;
 		};
-		2AAA4E862F76BDC6001E20DC /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		2AAA4E862F76BDC6001E20DC /* Exceptions for "VoidLinkPreview" folder in "VoidLink" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AbstractGamepadView.swift,
@@ -635,7 +662,7 @@
 			);
 			target = FB290CED19B2C406004C83CF /* VoidLink */;
 		};
-		2AE67B7F30580E1700BBAAFC /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		2AE67B7F30580E1700BBAAFC /* Exceptions for "VoidLinkPreview" folder in "VoidLink TV" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				RadialMenuView.swift,
@@ -645,9 +672,42 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		18A0EE282EFBCBFB00BA853A /* SVGs */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SVGs; sourceTree = "<group>"; };
-		2A039E572F72892B00546768 /* VoidLinkPreview */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (2AAA4E862F76BDC6001E20DC /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 2A93D5662F7D016C00C2207F /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 2AE67B7F30580E1700BBAAFC /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = VoidLinkPreview; sourceTree = "<group>"; };
-		C76000000000000000000001 /* ThirdParty/SwiftCollections */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = ThirdParty/SwiftCollections; sourceTree = "<group>"; };
+		18A0EE282EFBCBFB00BA853A /* SVGs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = SVGs;
+			sourceTree = "<group>";
+		};
+		2A039E572F72892B00546768 /* VoidLinkPreview */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2AAA4E862F76BDC6001E20DC /* Exceptions for "VoidLinkPreview" folder in "VoidLink" target */,
+				2A93D5662F7D016C00C2207F /* Exceptions for "VoidLinkPreview" folder in "VoidLinkPreview" target */,
+				2AE67B7F30580E1700BBAAFC /* Exceptions for "VoidLinkPreview" folder in "VoidLink TV" target */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = VoidLinkPreview;
+			sourceTree = "<group>";
+		};
+		C76000000000000000000001 /* ThirdParty/SwiftCollections */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = ThirdParty/SwiftCollections;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -681,6 +741,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F743498717EEF455C3299A50 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EEE928529A9A42911FBC6350 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FB290CEB19B2C406004C83CF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -708,6 +776,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1048B932DE52EAC31D6F281F /* Omarchy Shared */ = {
+			isa = PBXGroup;
+			children = (
+				7BBCD79D9757BEA3DA77ACC1 /* OpenOmarchyControl.swift */,
+			);
+			name = "Omarchy Shared";
+			path = OmarchyShared;
+			sourceTree = "<group>";
+		};
+		1F1E43B45E348EF35678A54A /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				C55E76D2CBABAD28898B0D0E /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		2A1F80873042688800E78B24 /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
@@ -830,6 +915,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		F9AFD9D4944233AA5CE7FA34 /* Omarchy Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				24F5153CAE66524337B80B77 /* OmarchyWidgets.swift */,
+			);
+			name = "Omarchy Widgets";
+			path = OmarchyWidgets;
+			sourceTree = "<group>";
+		};
 		FB1A67542132419700507771 /* VoidLink TV */ = {
 			isa = PBXGroup;
 			children = (
@@ -854,6 +948,8 @@
 				FB290CF019B2C406004C83CF /* Frameworks */,
 				FB290CEF19B2C406004C83CF /* Products */,
 				2A1F80873042688800E78B24 /* Recovered References */,
+				F9AFD9D4944233AA5CE7FA34 /* Omarchy Widgets */,
+				1048B932DE52EAC31D6F281F /* Omarchy Shared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -864,6 +960,7 @@
 				A7000000000000000002 /* VoidLink TV.app */,
 				D33F11000000000000000008 /* VoidLinkTopShelf.appex */,
 				2A039E562F72892B00546768 /* VoidLinkPreview.app */,
+				FB8480DF68FB332CE986CADF /* OmarchyWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -893,6 +990,7 @@
 				FB290CF319B2C406004C83CF /* CoreGraphics.framework */,
 				FB290CF519B2C406004C83CF /* UIKit.framework */,
 				FB290CF719B2C406004C83CF /* CoreData.framework */,
+				1F1E43B45E348EF35678A54A /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -1236,8 +1334,6 @@
 				2A039E572F72892B00546768 /* VoidLinkPreview */,
 			);
 			name = VoidLinkPreview;
-			packageProductDependencies = (
-			);
 			productName = VoidLinkSwiftUI;
 			productReference = 2A039E562F72892B00546768 /* VoidLinkPreview.app */;
 			productType = "com.apple.product-type.application";
@@ -1271,27 +1367,22 @@
 			productReference = A7000000000000000002 /* VoidLink TV.app */;
 			productType = "com.apple.product-type.application";
 		};
-		FB290CED19B2C406004C83CF /* VoidLink */ = {
+		D2637DCBDE2834420BFB66FF /* OmarchyWidgets */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = FB290D2019B2C406004C83CF /* Build configuration list for PBXNativeTarget "VoidLink" */;
+			buildConfigurationList = 0771375C002754B408FFC6B2 /* Build configuration list for PBXNativeTarget "OmarchyWidgets" */;
 			buildPhases = (
-				FB290CEA19B2C406004C83CF /* Sources */,
-				FB290CEB19B2C406004C83CF /* Frameworks */,
-				FB290CEC19B2C406004C83CF /* Resources */,
+				FB61C3428D76976816972CB4 /* Sources */,
+				F743498717EEF455C3299A50 /* Frameworks */,
+				4A86C2DD668E2BB1FADC941C /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				98AB2E861CAD468B0089BB98 /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				18A0EE282EFBCBFB00BA853A /* SVGs */,
-				C76000000000000000000001 /* ThirdParty/SwiftCollections */,
-			);
-			name = VoidLink;
-			productName = Limelight;
-			productReference = FB290CEE19B2C406004C83CF /* VoidLink.app */;
-			productType = "com.apple.product-type.application";
+			name = OmarchyWidgets;
+			productName = OmarchyWidgets;
+			productReference = FB8480DF68FB332CE986CADF /* OmarchyWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		D33F1100000000000000000A /* VoidLink Top Shelf */ = {
 			isa = PBXNativeTarget;
@@ -1307,6 +1398,30 @@
 			productName = VoidLinkTopShelf;
 			productReference = D33F11000000000000000008 /* VoidLinkTopShelf.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		FB290CED19B2C406004C83CF /* VoidLink */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FB290D2019B2C406004C83CF /* Build configuration list for PBXNativeTarget "VoidLink" */;
+			buildPhases = (
+				FB290CEA19B2C406004C83CF /* Sources */,
+				FB290CEB19B2C406004C83CF /* Frameworks */,
+				FB290CEC19B2C406004C83CF /* Resources */,
+				020F35F714FA1D4489CEB9AD /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				98AB2E861CAD468B0089BB98 /* PBXTargetDependency */,
+				1EC040557E5AF2C5B306AFAE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				18A0EE282EFBCBFB00BA853A /* SVGs */,
+				C76000000000000000000001 /* ThirdParty/SwiftCollections */,
+			);
+			name = VoidLink;
+			productName = Limelight;
+			productReference = FB290CEE19B2C406004C83CF /* VoidLink.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -1356,6 +1471,7 @@
 				2A039E552F72892B00546768 /* VoidLinkPreview */,
 				A7000000000000000001 /* VoidLink TV */,
 				D33F1100000000000000000A /* VoidLink Top Shelf */,
+				D2637DCBDE2834420BFB66FF /* OmarchyWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -1379,6 +1495,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		2A039E542F72892B00546768 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4A86C2DD668E2BB1FADC941C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1551,6 +1674,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D33F1100000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D33F11000000000000000006 /* TopShelfStore.swift in Sources */,
+				D33F11000000000000000009 /* ContentProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FB290CEA19B2C406004C83CF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1682,21 +1814,28 @@
 				84351B2D2C29AD6100A77989 /* ToolBarContainerView.m in Sources */,
 				18E4BCEA2E891895000A8657 /* MotionHandler.swift in Sources */,
 				988FCD41293B091B003050E2 /* KeyboardInputField.m in Sources */,
+				511E7C15DE35D32C20D23034 /* OpenOmarchyControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D33F1100000000000000000C /* Sources */ = {
+		FB61C3428D76976816972CB4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D33F11000000000000000006 /* TopShelfStore.swift in Sources */,
-				D33F11000000000000000009 /* ContentProvider.swift in Sources */,
+				9F2948BF0B653016E5DFB207 /* OmarchyWidgets.swift in Sources */,
+				A5C5C0B4A6C7E6C1724E81CF /* OpenOmarchyControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		1EC040557E5AF2C5B306AFAE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OmarchyWidgets;
+			target = D2637DCBDE2834420BFB66FF /* OmarchyWidgets */;
+			targetProxy = B06E229D2DA003A9A9D6A8A5 /* PBXContainerItemProxy */;
+		};
 		98AB2E861CAD468B0089BB98 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "moonlight-common";
@@ -1752,6 +1891,33 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		1B6CE257BE102499E276493E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = OmarchyWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2026.11.13;
+				PRODUCT_BUNDLE_IDENTIFIER = com.capy.moonlightphone.widgets;
+				PRODUCT_NAME = OmarchyWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) OMARCHY_WIDGET_EXTENSION";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		2A039E5F2F72892C00546768 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1851,6 +2017,32 @@
 			};
 			name = Release;
 		};
+		678E9D51E3AEFE1B4AEE605B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = OmarchyWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2026.11.13;
+				PRODUCT_BUNDLE_IDENTIFIER = com.capy.moonlightphone.widgets;
+				PRODUCT_NAME = OmarchyWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) OMARCHY_WIDGET_EXTENSION";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		A7000000000000000006 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = D33F11000000000000000013 /* Deeplink.xcconfig */;
@@ -1860,6 +2052,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				"CODE_SIGNING_ALLOWED[sdk=appletvsimulator*]" = NO;
 				"CODE_SIGNING_REQUIRED[sdk=appletvsimulator*]" = NO;
+				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=appletvsimulator*]" = "";
 				CODE_SIGN_STYLE = Automatic;
@@ -1908,7 +2101,6 @@
 				"OTHER_LDFLAGS[sdk=appletvos*]" = "$(PROJECT_DIR)/libs/opus/lib/tvOS/libopus.a";
 				"OTHER_LDFLAGS[sdk=appletvsimulator*]" = "$(PROJECT_DIR)/libs/opus/lib/tvOS-Sim/libopus.a";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(VOIDLINK_TV_BUNDLE_ID)";
-				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1934,6 +2126,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				"CODE_SIGNING_ALLOWED[sdk=appletvsimulator*]" = NO;
 				"CODE_SIGNING_REQUIRED[sdk=appletvsimulator*]" = NO;
+				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=appletvsimulator*]" = "";
 				CODE_SIGN_STYLE = Automatic;
@@ -1982,7 +2175,6 @@
 				"OTHER_LDFLAGS[sdk=appletvos*]" = "$(PROJECT_DIR)/libs/opus/lib/tvOS/libopus.a";
 				"OTHER_LDFLAGS[sdk=appletvsimulator*]" = "$(PROJECT_DIR)/libs/opus/lib/tvOS-Sim/libopus.a";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(VOIDLINK_TV_BUNDLE_ID)";
-				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -2000,10 +2192,65 @@
 			};
 			name = Release;
 		};
+		D33F1100000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D33F11000000000000000013 /* Deeplink.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = x;
+				DEVELOPMENT_TEAM = FRL23UV4N9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VoidLink TV/Top Shelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(VOIDLINK_TV_BUNDLE_ID).topshelf";
+				PRODUCT_NAME = VoidLinkTopShelf;
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 16.0;
+			};
+			name = Debug;
+		};
+		D33F1100000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D33F11000000000000000013 /* Deeplink.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = x;
+				DEVELOPMENT_TEAM = FRL23UV4N9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VoidLink TV/Top Shelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(VOIDLINK_TV_BUNDLE_ID).topshelf";
+				PRODUCT_NAME = VoidLinkTopShelf;
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 16.0;
+			};
+			name = Release;
+		};
 		FB290D1E19B2C406004C83CF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				VOIDLINK_TV_BUNDLE_ID = com.voidlink.tf.debug10.tvOS;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -2054,6 +2301,7 @@
 				SWIFT_OBJC_INTERFACE_HEADER_NAME = "";
 				SWIFT_VERSION = 4.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				VOIDLINK_TV_BUNDLE_ID = com.voidlink.tf.debug10.tvOS;
 				__DIAGNOSE_INVALID_DEPLOYMENT_TARGET_AS_ERROR = No;
 			};
 			name = Debug;
@@ -2061,7 +2309,6 @@
 		FB290D1F19B2C406004C83CF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				VOIDLINK_TV_BUNDLE_ID = com.voidlink.tf.tvOS;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -2110,6 +2357,7 @@
 				SWIFT_VERSION = 4.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
+				VOIDLINK_TV_BUNDLE_ID = com.voidlink.tf.tvOS;
 				__DIAGNOSE_INVALID_DEPLOYMENT_TARGET_AS_ERROR = No;
 			};
 			name = Release;
@@ -2172,7 +2420,7 @@
 				MARKETING_VERSION = 0.0.1;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = "$(PROJECT_DIR)/libs/opus/lib/iOS/libopus.a";
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(PROJECT_DIR)/libs/opus/lib/iOS-Sim/libopus.a";
-				PRODUCT_BUNDLE_IDENTIFIER = com.voidlink.tf.debug10.iOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.capy.moonlightphone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -2244,7 +2492,7 @@
 				MARKETING_VERSION = 0.0.1;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = "$(PROJECT_DIR)/libs/opus/lib/iOS/libopus.a";
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(PROJECT_DIR)/libs/opus/lib/iOS-Sim/libopus.a";
-				PRODUCT_BUNDLE_IDENTIFIER = com.voidlink.tf.iOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.capy.moonlightphone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				SKIP_INSTALL = NO;
@@ -2258,57 +2506,18 @@
 			};
 			name = Release;
 		};
-		D33F1100000000000000000E /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = D33F11000000000000000013 /* Deeplink.xcconfig */;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = x;
-				DEVELOPMENT_TEAM = FRL23UV4N9;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "VoidLink TV/Top Shelf/Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VOIDLINK_TV_BUNDLE_ID).topshelf";
-				PRODUCT_NAME = VoidLinkTopShelf;
-				SDKROOT = appletvos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 16.0;
-			};
-			name = Debug;
-		};
-		D33F1100000000000000000F /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = D33F11000000000000000013 /* Deeplink.xcconfig */;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_ENTITLEMENTS = "VoidLink TV/Top Shelf/TopShelf.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = x;
-				DEVELOPMENT_TEAM = FRL23UV4N9;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "VoidLink TV/Top Shelf/Info.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VOIDLINK_TV_BUNDLE_ID).topshelf";
-				PRODUCT_NAME = VoidLinkTopShelf;
-				SDKROOT = appletvos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 3;
-				TVOS_DEPLOYMENT_TARGET = 16.0;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0771375C002754B408FFC6B2 /* Build configuration list for PBXNativeTarget "OmarchyWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B6CE257BE102499E276493E /* Release */,
+				678E9D51E3AEFE1B4AEE605B /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		2A039E5E2F72892C00546768 /* Build configuration list for PBXNativeTarget "VoidLinkPreview" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2327,6 +2536,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D33F1100000000000000000D /* Build configuration list for PBXNativeTarget "VoidLink Top Shelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D33F1100000000000000000E /* Debug */,
+				D33F1100000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FB290CE919B2C406004C83CF /* Build configuration list for PBXProject "VoidLink" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2341,15 +2559,6 @@
 			buildConfigurations = (
 				FB290D2119B2C406004C83CF /* Debug */,
 				FB290D2219B2C406004C83CF /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		D33F1100000000000000000D /* Build configuration list for PBXNativeTarget "VoidLink Top Shelf" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				D33F1100000000000000000E /* Debug */,
-				D33F1100000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

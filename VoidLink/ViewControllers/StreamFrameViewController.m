@@ -131,6 +131,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
     UIPanGestureRecognizer *_phoneRevealPan;
     CFTimeInterval _phoneRevealBegan;
     NSUInteger _phoneRevealGeneration;
+    NSUInteger _phoneFocusGeneration;
     BOOL _phoneStreamReady;
     BOOL _phoneReconnecting;
     BOOL _phoneClosing;
@@ -1473,6 +1474,7 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
 }
 
 - (void)releasePhoneDrag {
+    ++_phoneFocusGeneration;
     [self endPhoneWindowTool];
     [_streamView configurePhoneDragLock:NO];
     [self phoneDragStateDidChange];
@@ -1718,6 +1720,28 @@ static __weak StreamFrameViewController *VLSharedStreamFrameViewController = nil
         [_phoneRevealButton.heightAnchor constraintEqualToConstant:44]
     ]];
     [self updatePhoneToolbarVisibility];
+    __weak typeof(self) weakSelf = self;
+    _streamView.phoneTextFocusEvent = ^(BOOL tap, CGPoint point) {
+        typeof(self) self=weakSelf;
+        if (!self) return;
+        NSUInteger generation=++self->_phoneFocusGeneration;
+        if (!tap || !self->_phoneStreamReady || self->_phoneReconnecting || self->_phoneClosing ||
+            self->_phoneWindowMode || self->_streamView.phoneDragLocked || ![self.streamConfig.appName isEqualToString:@"Desktop"]) return;
+        CGRect video=self->_streamView.inputGeometry.videoRect;
+        if (video.size.width<1 || video.size.height<1 || !CGRectContainsPoint(video,point)) return;
+        double x=(point.x-video.origin.x)/video.size.width,y=(point.y-video.origin.y)/video.size.height;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(.18*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            typeof(self) vc=weakSelf;
+            if (!vc || vc->_phoneFocusGeneration!=generation || !vc->_phoneStreamReady || vc->_phoneReconnecting || vc->_phoneClosing) return;
+            HttpManager *manager=[[HttpManager alloc] initWithAddress:vc.streamConfig.host httpsPort:vc.streamConfig.httpsPort serverCert:vc.streamConfig.serverCert];
+            [manager phoneWindowRequest:@{@"action":@"focus",@"x":@(x),@"y":@(y)} completion:^(NSDictionary *result,NSError *error) {
+                [manager closePhoneWindowSession];
+                typeof(self) current=weakSelf;
+                if (!current || error || current->_phoneFocusGeneration!=generation || !current->_phoneStreamReady || current->_phoneReconnecting || current->_phoneClosing) return;
+                [current->_streamView setPhoneKeyboardVisible:[result[@"editable"] boolValue]];
+            }];
+        });
+    };
     _floatingKeyboardButton.hidden = YES;
 }
 

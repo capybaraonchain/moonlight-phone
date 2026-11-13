@@ -85,6 +85,10 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
     AbsoluteTouchHandler* phoneDragHandler;
     BOOL phoneDesktopInput;
     UITouch *phoneWindowFinger;
+    UITouch *phoneTypingFinger;
+    CGPoint phoneTypingStart;
+    BOOL phoneTypingMoved;
+    NSTimeInterval phoneTypingBegan;
     NSMutableDictionary<NSValue *, NSNumber *> *phoneTouchIDs;
     AbsoluteTouchHandler *phoneTouchFallback;
 #endif
@@ -723,6 +727,11 @@ static NSString * const KeyboardInputSentinel = @"\u200B";
 
 
 // Floating keyboard button: closes the keyboard if it's open, otherwise opens it like the other keyboard buttons.
+- (void)setPhoneKeyboardVisible:(BOOL)visible {
+    if (visible) { if (!keyInputField.isFirstResponder && !isInputingText) [self toggleKeyboard]; }
+    else if (keyInputField.isFirstResponder) [keyInputField resignFirstResponder];
+}
+
 - (void)toggleSoftKeyboardFromButton{
     if(isInputingText) [self toggleKeyboard];
     else [self readyToBringUpSoftKeyboardByToolbox];
@@ -1388,6 +1397,12 @@ static CGFloat previousRollAngle = 0;
         [phoneDragHandler touchesBegan:touches withEvent:event];
         return;
     }
+    if (phoneDesktopInput && self.phoneTextFocusEvent) {
+        self.phoneTextFocusEvent(NO,CGPointZero);
+        UITouch *finger=touches.anyObject;
+        phoneTypingFinger=(event.allTouches.count==1 && finger.type==UITouchTypeDirect) ? finger : nil;
+        phoneTypingStart=[finger locationInView:self];phoneTypingMoved=NO;phoneTypingBegan=event.timestamp;
+    }
     if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_DOWN]) return;
 
     // if (@available(iOS 13.4, *)) {
@@ -1577,6 +1592,13 @@ static CGFloat previousRollAngle = 0;
         [phoneDragHandler touchesMoved:touches withEvent:event];
         return;
     }
+    if (phoneTypingFinger) {
+        CGPoint point=[phoneTypingFinger locationInView:self];
+        if (event.allTouches.count>1 || hypot(point.x-phoneTypingStart.x,point.y-phoneTypingStart.y)>10) {
+            phoneTypingMoved=YES;
+            if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
+        }
+    }
     if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_MOVE]) return;
 
     
@@ -1763,6 +1785,11 @@ static CGFloat previousRollAngle = 0;
     if (phoneDragHandler.phoneDragLocked && ((UITouch *)touches.anyObject).type == UITouchTypeDirect) {
         [phoneDragHandler touchesEnded:touches withEvent:event];
         return;
+    }
+    if (phoneTypingFinger && [touches containsObject:phoneTypingFinger]) {
+        UITouch *finger=phoneTypingFinger;phoneTypingFinger=nil;
+        if (!phoneTypingMoved && touches.count==1 && event.timestamp-phoneTypingBegan<.8 && self.phoneTextFocusEvent)
+            self.phoneTextFocusEvent(YES,[finger locationInView:self]);
     }
     if ([self sendPhoneTouches:touches event:event type:LI_TOUCH_EVENT_UP]) return;
 
@@ -1994,7 +2021,12 @@ static CGFloat previousRollAngle = 0;
     LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
     usleep(50 * 1000);
     LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
-    
+#if !TARGET_OS_TV
+    if (phoneDesktopInput) {
+        if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
+        [self setPhoneKeyboardVisible:NO];
+    }
+#endif
     return NO;
 }
 
@@ -2216,6 +2248,8 @@ static CGFloat previousRollAngle = 0;
 
 - (void)cancelPhoneTouches {
 #if !TARGET_OS_TV
+    phoneTypingFinger=nil;
+    if (self.phoneTextFocusEvent) self.phoneTextFocusEvent(NO,CGPointZero);
     if (phoneTouchIDs.count) LiSendTouchEvent(LI_TOUCH_EVENT_CANCEL_ALL, 0, 0, 0, 0, 0, 0, 0);
     [phoneTouchIDs removeAllObjects];
 #endif

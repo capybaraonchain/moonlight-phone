@@ -13,6 +13,7 @@ import re
 import secrets
 import socket
 import ssl
+import subprocess
 import threading
 import time
 
@@ -143,6 +144,23 @@ class Desktop:
                     self.gestures.pop(request['token'])
                 return {'ok':True}
             stamp, monitor = self.context()
+            if action == 'focus':
+                x,y=request.get('x'),request.get('y')
+                if any(type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=1 for v in (x,y)):
+                    raise Rejected('Invalid touch position')
+                w=self.command('activewindow',True)
+                if not self.eligible(w): return {'ok':True,'editable':False}
+                point=[monitor['x']+x*monitor['width']/monitor['scale'],monitor['y']+y*monitor['height']/monitor['scale']]
+                payload={'window':{k:w[k] for k in ('pid','at','size')},'point':point}
+                try:
+                    probe=Path(__file__).with_name('omarchy-phone-focus')
+                    r=subprocess.run([str(probe),json.dumps(payload)],env=self.env,capture_output=True,text=True,timeout=.85)
+                    editable=bool(json.loads(r.stdout).get('editable')) if r.returncode==0 else False
+                except (OSError,ValueError,subprocess.TimeoutExpired): editable=False
+                current=self.command('activewindow',True)
+                if self.context()[0]!=stamp or current.get('address')!=w['address'] or current.get('pid')!=w['pid']:
+                    editable=False
+                return {'ok':True,'editable':editable}
             if action == 'begin':
                 mode = request.get('mode')
                 if mode not in ('move','resize'):

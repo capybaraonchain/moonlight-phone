@@ -37,7 +37,6 @@ jobs:
             -derivedDataPath build/DerivedData -archivePath build/MoonlightPhone.xcarchive \
             archive CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_ENTITLEMENTS='' \
-            PRODUCT_BUNDLE_IDENTIFIER=com.capy.moonlightphone \
             MARKETING_VERSION=2026.11.11 CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             2>&1 | tee build/xcodebuild.log
           mkdir -p build/IPA/Payload

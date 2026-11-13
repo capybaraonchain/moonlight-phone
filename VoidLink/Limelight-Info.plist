@@ -12,6 +12,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>$(VOIDLINK_DEEPLINK_SCHEME)</string>
+				<string>moonlightphone</string>
 			</array>
 		</dict>
 	</array>

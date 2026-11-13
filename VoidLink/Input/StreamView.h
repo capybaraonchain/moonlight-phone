@@ -63,6 +63,8 @@ NS_INLINE StreamInputGeometry StreamInputGeometryMake(CGRect bounds, CGFloat asp
 @property (weak, nonatomic) PencilHandler* pencilHandler;
 @property (assign, nonatomic) BOOL phoneWindowControlActive;
 @property (copy, nonatomic) void (^phoneWindowPan)(CGPoint delta);
+@property (copy, nonatomic) void (^phoneTextFocusEvent)(BOOL tap, CGPoint point);
+- (void)setPhoneKeyboardVisible:(BOOL)visible;
 
 - (void) setupStreamViewWithControllerSupport:(ControllerSupport*)controllerSupport
                           interactionDelegate:(id<UserInteractionDelegate>)interactionDelegate
